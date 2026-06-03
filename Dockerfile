@@ -16,6 +16,13 @@ RUN mkdir -p -m 755 /etc/apt/keyrings \
 RUN curl -fsSL https://antigravity.google/cli/install.sh | bash
 ENV PATH="/root/.local/bin:${PATH}"
 
+# Force git to use the GitHub CLI as its credential helper for HTTPS
+RUN git config --global credential.https://github.com.helper '!gh auth git-credential'
+
+# Set the global bot identity for automated commits
+RUN git config --global user.name "Antigravity Bot" \
+    && git config --global user.email "bot@jellybeanoutofhome.com"
+
 # Setup the workspace and API
 WORKDIR /app
 COPY bot-api/ /app/bot-api/
