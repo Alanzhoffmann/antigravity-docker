@@ -126,21 +126,39 @@ void StartAgySession(string sessionName, string path, string initialCommand)
     
     if (check.ExitCode != 0)
     {
-        // 1. Start a persistent bash session instead of binding it directly to 'agy'
         ExecuteShellCommand($"tmux new-session -d -s {sessionName} bash");
-        Thread.Sleep(500); // Give the tmux socket a moment to initialize
+        Thread.Sleep(500); 
         
-        // 2. Navigate into the cloned repository BEFORE starting the agent
         ExecuteShellCommand($"tmux send-keys -t {sessionName} \"cd {path}\" Enter");
         Thread.Sleep(500);
         
-        // 3. Launch Antigravity inside the stable terminal
         ExecuteShellCommand($"tmux send-keys -t {sessionName} \"agy\" Enter");
-        Thread.Sleep(1500); // Give the agent time to boot up and authenticate
+        Thread.Sleep(1500); 
     }
     
-    // 4. Send the actual GitHub task prompt
-    ExecuteShellCommand($"tmux send-keys -t {sessionName} \"{initialCommand}\" Enter");
+    // Use the new buffer method to send the complex prompt safely
+    SendPromptViaBuffer(sessionName, initialCommand);
+}
+
+void SendPromptViaBuffer(string sessionName, string promptText)
+{
+    // 1. Write the raw, unescaped text to a temporary file
+    string tempFilePath = Path.GetTempFileName();
+    File.WriteAllText(tempFilePath, promptText);
+
+    // 2. Load the file directly into the tmux clipboard buffer
+    ExecuteShellCommand($"tmux load-buffer {tempFilePath}");
+
+    // 3. Type the /goal command initiator
+    ExecuteShellCommand($"tmux send-keys -t {sessionName} \"/goal \"");
+
+    // 4. Paste the buffer. This bypasses Bash completely and acts as if 
+    // a human physically typed the exact characters into the TUI.
+    ExecuteShellCommand($"tmux paste-buffer -t {sessionName}");
+
+    // 5. Hit Enter to execute, then clean up the temp file
+    ExecuteShellCommand($"tmux send-keys -t {sessionName} Enter");
+    File.Delete(tempFilePath);
 }
 
 void ExecuteShellCommand(string command)
