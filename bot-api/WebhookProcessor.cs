@@ -2,7 +2,7 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using bot_api.Chats;
+using bot_api.Interfaces;
 using bot_api.Models;
 
 namespace bot_api;
@@ -10,18 +10,16 @@ namespace bot_api;
 public class WebhookProcessor
 {
     private readonly ILogger<WebhookProcessor> _logger;
-    private readonly OllamaChat _ollamaChat;
-    private readonly AgyChat _agyChat;
+    private readonly IAgentChat _agentChat;
 
     // Deduplicate in-flight issue processing tasks
     readonly ConcurrentDictionary<string, Task> inFlightIssues = new();
     readonly string workspaceBase = "/app/workspaces";
 
-    public WebhookProcessor(ILogger<WebhookProcessor> logger, OllamaChat ollamaChat, AgyChat agyChat)
+    public WebhookProcessor(ILogger<WebhookProcessor> logger, IAgentChat agentChat)
     {
         _logger = logger;
-        _ollamaChat = ollamaChat;
-        _agyChat = agyChat;
+        _agentChat = agentChat;
     }
 
     public async Task ProcessWebhookAsync(string eventType, string deliveryId, string rawBody, string repoName)
@@ -72,7 +70,7 @@ INSTRUCTIONS:
             _logger.LogInformation($"[Processor] Starting agent for issue #{issueNum}");
             var task = Task.Run(async () =>
             {
-                (string cleanResponse, string newSessionId) = await _agyChat.GetResponseAsync(localRepoPath, issueNum, prompt);
+                (string cleanResponse, string newSessionId) = await _agentChat.GetResponseAsync(localRepoPath, issueNum, prompt);
 
                 PostGitHubComment(localRepoPath, issueNum, cleanResponse, newSessionId);
             });
@@ -156,7 +154,7 @@ INSTRUCTIONS:
                 string execPrompt =
                     $"Feedback received on Issue #{issueNum}: '{commentBody}'. Update the plan accordingly. Post an updated plan artifact and ask for another 👍 to proceed.";
                 _logger.LogInformation($"[Processor] Feedback on #{issueNum}: '{commentBody.Substring(0, Math.Min(80, commentBody.Length))}'");
-                var response = await _agyChat.GetResponseAsync(localRepoPath, issueNum, execPrompt);
+                var response = await _agentChat.GetResponseAsync(localRepoPath, issueNum, execPrompt);
                 PostGitHubComment(localRepoPath, issueNum, response, activeSessionId);
             }
             return;
@@ -204,7 +202,7 @@ INSTRUCTIONS:
         _logger.LogInformation($"[Approval] Plan approved for issue #{issueNum} (session={sessionId}) — starting implementation");
         string prompt =
             $"The plan for Issue #{issueNum} has been approved. Create branch 'fix/issue-{issueNum}', implement the code changes, run any available local tests, and raise a PR via `gh pr create`. Commit only changes related to this issue.";
-        string response = await _agyChat.GetResponseAsync(localRepoPath, prompt, sessionId);
+        string response = await _agentChat.GetResponseAsync(localRepoPath, issueNum, prompt);
         PostGitHubComment(localRepoPath, issueNum, response, sessionId);
         _logger.LogInformation($"[Approval] Implementation complete for issue #{issueNum}");
         await Task.CompletedTask;
