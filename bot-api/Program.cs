@@ -7,9 +7,12 @@ var app = builder.Build();
 var supportedRepos = new HashSet<string> { "antigravity-docker" };
 string workspaceBase = "/app/workspaces";
 
+app.MapGet("/", () => "Antigravity Bot API is running. Awaiting GitHub webhooks...");
+
 app.MapPost("/github-webhook", async (HttpContext context) =>
 {
-    var eventType = context.Request.Headers["X-GitHub-Event"].ToString();
+
+    var eventType = context.Request.Headers["X-Github-Event"].ToString();
     using var document = await JsonDocument.ParseAsync(context.Request.Body);
     var root = document.RootElement;
     

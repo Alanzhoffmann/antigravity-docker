@@ -3,12 +3,12 @@ services:
     build: .
     container_name: antigravity_coordinator
     ports:
-      - "8080:8080"
+      - "5555:8080"
     volumes:
       # Persist the global Antigravity token and preferences across all dynamic sessions
-      - /home/user/antigravity-bot/.config/antigravity:/root/.config/antigravity
-      - /home/user/antigravity-bot/.local/share:/root/.local/share
+      - ${DOCKER_DIR}/config/antigravity-bot/.config/antigravity:/root/.config/antigravity
+      - ${DOCKER_DIR}/config/antigravity-bot/.local/share:/root/.local/share
       
       # Persist the GitHub workspaces
-      - /home/user/antigravity-bot/workspaces:/app/workspaces
+      - ${DOCKER_DIR}/config/antigravity-bot/workspaces:/app/workspaces
     restart: unless-stopped
