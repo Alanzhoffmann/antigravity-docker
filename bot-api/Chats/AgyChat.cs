@@ -2,11 +2,12 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using bot_api.Interfaces;
 using bot_api.Models;
 
 namespace bot_api.Chats;
 
-public class AgyChat
+public class AgyChat : IAgentChat
 {
     private readonly ILogger<AgyChat> _logger;
 
@@ -31,11 +32,8 @@ public class AgyChat
         string planContent = TryReadPlanArtifact(newSessionId);
         if (!string.IsNullOrEmpty(planContent))
         {
-            _logger.LogInformation(
-                $"[Processor] Embedding plan artifact in comment for session '{newSessionId}'"
-            );
-            cleanResponse =
-                $"{cleanResponse}\n\n---\n\n### 📋 Implementation Plan\n\n{planContent}";
+            _logger.LogInformation($"[Processor] Embedding plan artifact in comment for session '{newSessionId}'");
+            cleanResponse = $"{cleanResponse}\n\n---\n\n### 📋 Implementation Plan\n\n{planContent}";
         }
         else
         {
@@ -47,9 +45,7 @@ public class AgyChat
 
     private string ExecuteAgyHeadless(string repoPath, string prompt, string? conversationId = null)
     {
-        _logger.LogInformation(
-            $"[AgyRunner] Starting agy session='{conversationId ?? "new"}' cwd='{repoPath}'"
-        );
+        _logger.LogInformation($"[AgyRunner] Starting agy session='{conversationId ?? "new"}' cwd='{repoPath}'");
 
         using var process = new Process
         {
@@ -81,9 +77,7 @@ public class AgyChat
         process.WaitForExit();
         sw.Stop();
 
-        _logger.LogInformation(
-            $"[AgyRunner] agy exited code={process.ExitCode} in {sw.Elapsed.TotalSeconds:F1}s"
-        );
+        _logger.LogInformation($"[AgyRunner] agy exited code={process.ExitCode} in {sw.Elapsed.TotalSeconds:F1}s");
 
         if (!string.IsNullOrEmpty(error))
             _logger.LogWarning($"[AgyRunner] stderr: {error.Trim()}");
@@ -99,14 +93,9 @@ public class AgyChat
 
     string ExtractConversationId(string agyOutput)
     {
-        var match = Regex.Match(
-            agyOutput,
-            @"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
-        );
+        var match = Regex.Match(agyOutput, @"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}");
         string id = match.Success ? match.Value : string.Empty;
-        _logger.LogInformation(
-            $"[AgyRunner] Extracted conversation ID: '{(string.IsNullOrEmpty(id) ? "none found" : id)}'"
-        );
+        _logger.LogInformation($"[AgyRunner] Extracted conversation ID: '{(string.IsNullOrEmpty(id) ? "none found" : id)}'");
         return id;
     }
 
@@ -115,8 +104,7 @@ public class AgyChat
         if (string.IsNullOrEmpty(sessionId))
             return string.Empty;
 
-        var transcriptPath =
-            $"/root/.gemini/antigravity-cli/brain/{sessionId}/.system_generated/logs/transcript.jsonl";
+        var transcriptPath = $"/root/.gemini/antigravity-cli/brain/{sessionId}/.system_generated/logs/transcript.jsonl";
         _logger.LogInformation($"[Transcript] Reading transcript for session '{sessionId}'");
 
         if (!File.Exists(transcriptPath))
@@ -139,15 +127,9 @@ public class AgyChat
                 {
                     using var doc = JsonDocument.Parse(line);
                     var root = doc.RootElement;
-                    if (
-                        root.TryGetProperty("type", out var typeProp)
-                        && typeProp.GetString() == "PLANNER_RESPONSE"
-                    )
+                    if (root.TryGetProperty("type", out var typeProp) && typeProp.GetString() == "PLANNER_RESPONSE")
                     {
-                        if (
-                            root.TryGetProperty("content", out var contentProp)
-                            && contentProp.ValueKind == JsonValueKind.String
-                        )
+                        if (root.TryGetProperty("content", out var contentProp) && contentProp.ValueKind == JsonValueKind.String)
                         {
                             var content = contentProp.GetString();
                             if (!string.IsNullOrEmpty(content))
@@ -165,14 +147,10 @@ public class AgyChat
         }
         catch (Exception ex)
         {
-            _logger.LogError(
-                $"[Transcript] Error reading transcript for session '{sessionId}': {ex.Message}"
-            );
+            _logger.LogError($"[Transcript] Error reading transcript for session '{sessionId}': {ex.Message}");
         }
 
-        _logger.LogInformation(
-            $"[Transcript] Read {linesRead} lines, {responsesFound} planner responses (session='{sessionId}')"
-        );
+        _logger.LogInformation($"[Transcript] Read {linesRead} lines, {responsesFound} planner responses (session='{sessionId}')");
         return finalContent;
     }
 
@@ -198,9 +176,7 @@ public class AgyChat
         try
         {
             string content = File.ReadAllText(candidates[0]);
-            _logger.LogInformation(
-                $"[Artifact] Read plan artifact '{candidates[0]}': {content.Length} chars"
-            );
+            _logger.LogInformation($"[Artifact] Read plan artifact '{candidates[0]}': {content.Length} chars");
             return content;
         }
         catch (Exception ex)

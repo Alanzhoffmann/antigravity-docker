@@ -20,9 +20,7 @@ HashSet<string> supportedRepos = new HashSet<string> { "antigravity-docker" };
 
 void Log(string level, string component, string message)
 {
-    Console.WriteLine(
-        $"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}Z] [{level}] [{component}] {message}"
-    );
+    Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}Z] [{level}] [{component}] {message}");
 }
 
 void LogInfo(string component, string message) => Log("INFO ", component, message);
@@ -78,12 +76,7 @@ app.MapPost(
         {
             try
             {
-                await webhookProcessor.ProcessWebhookAsync(
-                    eventType,
-                    deliveryId,
-                    rawBody,
-                    repoName
-                );
+                await webhookProcessor.ProcessWebhookAsync(eventType, deliveryId, rawBody, repoName);
             }
             catch (Exception ex)
             {
@@ -101,10 +94,7 @@ public static class JsonElementExtensions
 {
     public static string? GetStringSafe(this JsonElement element, string propertyName)
     {
-        if (
-            element.ValueKind == JsonValueKind.Object
-            && element.TryGetProperty(propertyName, out var prop)
-        )
+        if (element.ValueKind == JsonValueKind.Object && element.TryGetProperty(propertyName, out var prop))
             return prop.ValueKind == JsonValueKind.String ? prop.GetString() : prop.ToString();
         return null;
     }
@@ -114,10 +104,7 @@ public static class JsonElementExtensions
         var current = element;
         foreach (var name in path)
         {
-            if (
-                current.ValueKind != JsonValueKind.Object
-                || !current.TryGetProperty(name, out current)
-            )
+            if (current.ValueKind != JsonValueKind.Object || !current.TryGetProperty(name, out current))
                 return null;
         }
         return current.ValueKind == JsonValueKind.String ? current.GetString() : current.ToString();

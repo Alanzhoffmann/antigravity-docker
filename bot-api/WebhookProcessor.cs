@@ -14,36 +14,23 @@ public class WebhookProcessor
     private readonly AgyChat _agyChat;
 
     // Deduplicate in-flight issue processing tasks
-    ConcurrentDictionary<string, Task> inFlightIssues = new();
-    string workspaceBase = "/app/workspaces";
+    readonly ConcurrentDictionary<string, Task> inFlightIssues = new();
+    readonly string workspaceBase = "/app/workspaces";
 
-    public WebhookProcessor(
-        ILogger<WebhookProcessor> logger,
-        OllamaChat ollamaChat,
-        AgyChat agyChat
-    )
+    public WebhookProcessor(ILogger<WebhookProcessor> logger, OllamaChat ollamaChat, AgyChat agyChat)
     {
         _logger = logger;
         _ollamaChat = ollamaChat;
         _agyChat = agyChat;
     }
 
-    public async Task ProcessWebhookAsync(
-        string eventType,
-        string deliveryId,
-        string rawBody,
-        string repoName
-    )
+    public async Task ProcessWebhookAsync(string eventType, string deliveryId, string rawBody, string repoName)
     {
-        _logger.LogInformation(
-            $"[Processor] Processing event='{eventType}' action delivery='{deliveryId}'"
-        );
+        _logger.LogInformation($"[Processor] Processing event='{eventType}' action delivery='{deliveryId}'");
         using var document = JsonDocument.Parse(rawBody);
         var root = document.RootElement;
         var action = root.GetStringSafe("action") ?? string.Empty;
-        _logger.LogInformation(
-            $"[Processor] repo='{repoName}' event='{eventType}' action='{action}'"
-        );
+        _logger.LogInformation($"[Processor] repo='{repoName}' event='{eventType}' action='{action}'");
 
         var cloneUrl = root.GetNestedStringSafe("repository", "clone_url") ?? string.Empty;
 
@@ -64,9 +51,7 @@ public class WebhookProcessor
             string issueKey = $"{repoName}#{issueNum}";
             if (inFlightIssues.ContainsKey(issueKey))
             {
-                _logger.LogWarning(
-                    $"[Processor] {issueKey} already in-flight — skipping duplicate"
-                );
+                _logger.LogWarning($"[Processor] {issueKey} already in-flight — skipping duplicate");
                 return;
             }
 
@@ -87,11 +72,7 @@ INSTRUCTIONS:
             _logger.LogInformation($"[Processor] Starting agent for issue #{issueNum}");
             var task = Task.Run(async () =>
             {
-                (string cleanResponse, string newSessionId) = await _agyChat.GetResponseAsync(
-                    localRepoPath,
-                    issueNum,
-                    prompt
-                );
+                (string cleanResponse, string newSessionId) = await _agyChat.GetResponseAsync(localRepoPath, issueNum, prompt);
 
                 PostGitHubComment(localRepoPath, issueNum, cleanResponse, newSessionId);
             });
@@ -127,9 +108,7 @@ INSTRUCTIONS:
                 if (!string.IsNullOrEmpty(sid))
                     await HandleApprovalAsync(localRepoPath, issueNum, sid);
                 else
-                    _logger.LogWarning(
-                        $"[Processor] 👍 on #{issueNum} but no active session found"
-                    );
+                    _logger.LogWarning($"[Processor] 👍 on #{issueNum} but no active session found");
             }
             return;
         }
@@ -148,9 +127,7 @@ INSTRUCTIONS:
             var commentBody = root.GetNestedStringSafe("comment", "body");
             if (string.IsNullOrEmpty(issueNum) || string.IsNullOrEmpty(commentBody))
             {
-                _logger.LogWarning(
-                    $"[Processor] issue_comment missing issue.number or comment.body"
-                );
+                _logger.LogWarning($"[Processor] issue_comment missing issue.number or comment.body");
                 return;
             }
 
@@ -158,9 +135,7 @@ INSTRUCTIONS:
             EnsureRepo(localRepoPath, cloneUrl, repoName, issueNum);
 
             string activeSessionId = GetSessionIdFromIssue(localRepoPath, issueNum);
-            _logger.LogInformation(
-                $"[Processor] issue_comment #{issueNum} activeSession='{activeSessionId}'"
-            );
+            _logger.LogInformation($"[Processor] issue_comment #{issueNum} activeSession='{activeSessionId}'");
             if (string.IsNullOrEmpty(activeSessionId))
             {
                 _logger.LogWarning($"[Processor] No active session for #{issueNum}");
@@ -180,9 +155,7 @@ INSTRUCTIONS:
             {
                 string execPrompt =
                     $"Feedback received on Issue #{issueNum}: '{commentBody}'. Update the plan accordingly. Post an updated plan artifact and ask for another 👍 to proceed.";
-                _logger.LogInformation(
-                    $"[Processor] Feedback on #{issueNum}: '{commentBody.Substring(0, Math.Min(80, commentBody.Length))}'"
-                );
+                _logger.LogInformation($"[Processor] Feedback on #{issueNum}: '{commentBody.Substring(0, Math.Min(80, commentBody.Length))}'");
                 var response = await _agyChat.GetResponseAsync(localRepoPath, issueNum, execPrompt);
                 PostGitHubComment(localRepoPath, issueNum, response, activeSessionId);
             }
@@ -192,14 +165,10 @@ INSTRUCTIONS:
         // ─── PULL REQUEST MERGED: delete the isolated clone ───────────────────────
         if (eventType == "pull_request" && action == "closed")
         {
-            bool merged =
-                root.TryGetProperty("pull_request", out var pr)
-                && pr.TryGetProperty("merged", out var m)
-                && m.GetBoolean();
+            bool merged = root.TryGetProperty("pull_request", out var pr) && pr.TryGetProperty("merged", out var m) && m.GetBoolean();
             if (merged)
             {
-                string headRef =
-                    root.GetNestedStringSafe("pull_request", "head", "ref") ?? string.Empty;
+                string headRef = root.GetNestedStringSafe("pull_request", "head", "ref") ?? string.Empty;
                 _logger.LogInformation($"[Processor] PR merged head_ref='{headRef}'");
                 var issueMatch = Regex.Match(headRef, @"fix/issue-(\d+)");
                 if (issueMatch.Success)
@@ -208,9 +177,7 @@ INSTRUCTIONS:
                     string path = GetIssueRepoPath(repoName, issueNum);
                     if (Directory.Exists(path))
                     {
-                        _logger.LogInformation(
-                            $"[Processor] Deleting isolated clone for issue #{issueNum}: '{path}'"
-                        );
+                        _logger.LogInformation($"[Processor] Deleting isolated clone for issue #{issueNum}: '{path}'");
                         try
                         {
                             Directory.Delete(path, recursive: true);
@@ -218,9 +185,7 @@ INSTRUCTIONS:
                         }
                         catch (Exception ex)
                         {
-                            _logger.LogError(
-                                $"[Processor] Failed to delete '{path}': {ex.Message}"
-                            );
+                            _logger.LogError($"[Processor] Failed to delete '{path}': {ex.Message}");
                         }
                     }
                 }
@@ -228,20 +193,15 @@ INSTRUCTIONS:
             return;
         }
 
-        _logger.LogInformation(
-            $"[Processor] Unhandled event='{eventType}' action='{action}' — no-op"
-        );
+        _logger.LogInformation($"[Processor] Unhandled event='{eventType}' action='{action}' — no-op");
         await Task.CompletedTask;
     }
 
-    string GetIssueRepoPath(string repoName, string issueNum) =>
-        $"{workspaceBase}/{repoName}-issue-{issueNum}";
+    string GetIssueRepoPath(string repoName, string issueNum) => $"{workspaceBase}/{repoName}-issue-{issueNum}";
 
     async Task HandleApprovalAsync(string localRepoPath, string issueNum, string sessionId)
     {
-        _logger.LogInformation(
-            $"[Approval] Plan approved for issue #{issueNum} (session={sessionId}) — starting implementation"
-        );
+        _logger.LogInformation($"[Approval] Plan approved for issue #{issueNum} (session={sessionId}) — starting implementation");
         string prompt =
             $"The plan for Issue #{issueNum} has been approved. Create branch 'fix/issue-{issueNum}', implement the code changes, run any available local tests, and raise a PR via `gh pr create`. Commit only changes related to this issue.";
         string response = await _agyChat.GetResponseAsync(localRepoPath, prompt, sessionId);
@@ -271,45 +231,25 @@ INSTRUCTIONS:
 
     void PostGitHubComment(string repoPath, string issueNum, string body, string sessionId)
     {
-        string payload = string.IsNullOrEmpty(sessionId)
-            ? body
-            : $"{body}\n\n<!-- agy-session-id: {sessionId} -->";
+        string payload = string.IsNullOrEmpty(sessionId) ? body : $"{body}\n\n<!-- agy-session-id: {sessionId} -->";
 
-        _logger.LogInformation(
-            $"[GitHub] Posting comment on issue #{issueNum} (session='{sessionId}', length={payload.Length})"
-        );
+        _logger.LogInformation($"[GitHub] Posting comment on issue #{issueNum} (session='{sessionId}', length={payload.Length})");
         ExecuteProcess("gh", repoPath, "issue", "comment", issueNum, "--body", payload);
     }
 
     string GetSessionIdFromIssue(string repoPath, string issueNum)
     {
         _logger.LogInformation($"[GitHub] Fetching session ID from issue #{issueNum}");
-        string commentsJson = ExecuteProcess(
-            "gh",
-            repoPath,
-            "issue",
-            "view",
-            issueNum,
-            "--json",
-            "comments"
-        );
-        var match = Regex.Match(
-            commentsJson,
-            @"<!-- agy-session-id: ([a-zA-Z0-9\-]+) -->",
-            RegexOptions.RightToLeft
-        );
+        string commentsJson = ExecuteProcess("gh", repoPath, "issue", "view", issueNum, "--json", "comments");
+        var match = Regex.Match(commentsJson, @"<!-- agy-session-id: ([a-zA-Z0-9\-]+) -->", RegexOptions.RightToLeft);
         string sessionId = match.Success ? match.Groups[1].Value : string.Empty;
-        _logger.LogInformation(
-            $"[GitHub] Session ID for issue #{issueNum}: '{(string.IsNullOrEmpty(sessionId) ? "none" : sessionId)}'"
-        );
+        _logger.LogInformation($"[GitHub] Session ID for issue #{issueNum}: '{(string.IsNullOrEmpty(sessionId) ? "none" : sessionId)}'");
         return sessionId;
     }
 
     string ExecuteProcess(string fileName, string workingDirectory, params string[] args)
     {
-        _logger.LogInformation(
-            $"[Process] Executing: {fileName} {string.Join(" ", args)} (cwd='{workingDirectory}')"
-        );
+        _logger.LogInformation($"[Process] Executing: {fileName} {string.Join(" ", args)} (cwd='{workingDirectory}')");
 
         using var process = new Process
         {
@@ -334,9 +274,7 @@ INSTRUCTIONS:
         process.WaitForExit();
         sw.Stop();
 
-        _logger.LogInformation(
-            $"[Process] {fileName} exited code={process.ExitCode} in {sw.Elapsed.TotalMilliseconds:F0}ms"
-        );
+        _logger.LogInformation($"[Process] {fileName} exited code={process.ExitCode} in {sw.Elapsed.TotalMilliseconds:F0}ms");
         if (!string.IsNullOrEmpty(errOut))
             _logger.LogWarning($"[Process] {fileName} stderr: {errOut.Trim()}");
 
