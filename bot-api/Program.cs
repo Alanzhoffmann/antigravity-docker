@@ -164,11 +164,30 @@ void SendPromptViaBuffer(string sessionName, string promptText)
 void ExecuteShellCommand(string command)
 {
     var escapedArgs = command.Replace("\"", "\\\"");
-    Process.Start(new ProcessStartInfo
+    
+    using var process = new Process
     {
-        FileName = "/bin/bash",
-        Arguments = $"-c \"{escapedArgs}\"",
-        RedirectStandardOutput = true,
-        UseShellExecute = false
-    });
+        StartInfo = new ProcessStartInfo
+        {
+            FileName = "/bin/bash",
+            Arguments = $"-c \"{escapedArgs}\"",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true, // Capture errors to prevent silent failures
+            UseShellExecute = false,
+            CreateNoWindow = true
+        }
+    };
+
+    process.Start();
+    
+    // Read the output for logging (optional, but great for debugging)
+    string output = process.StandardOutput.ReadToEnd();
+    string error = process.StandardError.ReadToEnd();
+    
+    process.WaitForExit(); // THIS IS THE CRITICAL FIX
+
+    if (process.ExitCode != 0)
+    {
+        Console.WriteLine($"[BASH ERROR] {error}");
+    }
 }
