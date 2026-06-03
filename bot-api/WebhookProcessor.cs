@@ -16,10 +16,12 @@ public class WebhookProcessor
     readonly ConcurrentDictionary<string, Task> inFlightIssues = new();
     readonly string workspaceBase = "/app/workspaces";
 
-    public WebhookProcessor(ILogger<WebhookProcessor> logger, IAgentChat agentChat)
+    public WebhookProcessor(ILogger<WebhookProcessor> logger, IEnumerable<IAgentChat> agentChats)
     {
         _logger = logger;
-        _agentChat = agentChat;
+        _agentChat =
+            agentChats.OrderBy(x => x.SortOrder).FirstOrDefault(x => x.IsEnabled)
+            ?? throw new InvalidOperationException("No enabled IAgentChat implementations found");
     }
 
     public async Task ProcessWebhookAsync(string eventType, string deliveryId, string rawBody, string repoName)

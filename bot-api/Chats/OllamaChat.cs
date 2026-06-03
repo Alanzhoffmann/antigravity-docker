@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using bot_api.Interfaces;
 using bot_api.Models;
 using bot_api.Options;
@@ -19,10 +20,23 @@ public class OllamaChat : IAgentChat
         _optionsMonitor = optionsMonitor;
     }
 
+    private string? Model => _optionsMonitor.CurrentValue.Model;
+    private Uri? Url => _optionsMonitor.CurrentValue.Url;
+
+    [MemberNotNullWhen(true, nameof(Model), nameof(Url))]
+    public bool IsEnabled => Url is not null && !string.IsNullOrEmpty(Model);
+
+    public int SortOrder => 1;
+
     public async Task<ChatResult> GetResponseAsync(string repoPath, string issueNum, string prompt)
     {
-        var options = _optionsMonitor.CurrentValue;
-        IChatClient chatClient = new OllamaApiClient(options.Url, options.Model);
+        if (!IsEnabled)
+        {
+            _logger.LogWarning($"[OllamaChat] OllamaChat is not enabled due to missing configuration. Model: '{Model}', Url: '{Url}'");
+            return new ChatResult("OllamaChat is not configured properly. Please check the logs for details.", issueNum);
+        }
+
+        IChatClient chatClient = new OllamaApiClient(Url, Model);
 
         // Start the conversation with context for the AI model
         if (!_conversationHistories.TryGetValue(issueNum, out var chatHistory))

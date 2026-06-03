@@ -3,15 +3,18 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using bot_api;
 using bot_api.Chats;
+using bot_api.Interfaces;
 using bot_api.Options;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddSingleton<OllamaChat>();
-builder.Services.AddSingleton<AgyChat>();
+builder.Services.AddSingleton<IAgentChat, OllamaChat>();
+builder.Services.AddSingleton<IAgentChat, AgyChat>();
+builder.Services.AddSingleton<IAgentChat, NullChat>();
 builder.Services.AddScoped<WebhookProcessor>();
 
 builder.Services.AddOptions<OllamaOptions>().BindConfiguration(OllamaOptions.SectionName);
+builder.Services.AddOptions<AgyOptions>().BindConfiguration(AgyOptions.SectionName);
 
 var app = builder.Build();
 

@@ -4,17 +4,24 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using bot_api.Interfaces;
 using bot_api.Models;
+using bot_api.Options;
+using Microsoft.Extensions.Options;
 
 namespace bot_api.Chats;
 
 public class AgyChat : IAgentChat
 {
     private readonly ILogger<AgyChat> _logger;
+    private readonly IOptionsMonitor<AgyOptions> _optionsMonitor;
 
-    public AgyChat(ILogger<AgyChat> logger)
+    public AgyChat(IOptionsMonitor<AgyOptions> optionsMonitor, ILogger<AgyChat> logger)
     {
+        _optionsMonitor = optionsMonitor;
         _logger = logger;
     }
+
+    // TODO disable when quota exceeded
+    public bool IsEnabled => _optionsMonitor.CurrentValue.IsEnabled;
 
     public async Task<ChatResult> GetResponseAsync(string repoPath, string issueNum, string prompt)
     {
