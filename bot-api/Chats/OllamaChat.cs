@@ -1,6 +1,8 @@
 using bot_api.Interfaces;
 using bot_api.Models;
+using bot_api.Options;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Options;
 using OllamaSharp;
 
 namespace bot_api.Chats;
@@ -8,17 +10,19 @@ namespace bot_api.Chats;
 public class OllamaChat : IAgentChat
 {
     private readonly ILogger<OllamaChat> _logger;
-
+    private readonly IOptionsMonitor<OllamaOptions> _optionsMonitor;
     private readonly Dictionary<string, List<ChatMessage>> _conversationHistories = new();
 
-    public OllamaChat(ILogger<OllamaChat> logger)
+    public OllamaChat(IOptionsMonitor<OllamaOptions> optionsMonitor, ILogger<OllamaChat> logger)
     {
         _logger = logger;
+        _optionsMonitor = optionsMonitor;
     }
 
     public async Task<ChatResult> GetResponseAsync(string repoPath, string issueNum, string prompt)
     {
-        IChatClient chatClient = new OllamaApiClient(new Uri("http://localhost:11434/"), "qwen3.5:9b");
+        var options = _optionsMonitor.CurrentValue;
+        IChatClient chatClient = new OllamaApiClient(options.Url, options.Model);
 
         // Start the conversation with context for the AI model
         if (!_conversationHistories.TryGetValue(issueNum, out var chatHistory))

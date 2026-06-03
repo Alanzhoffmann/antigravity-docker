@@ -3,12 +3,15 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using bot_api;
 using bot_api.Chats;
+using bot_api.Options;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddScoped<OllamaChat>();
-builder.Services.AddScoped<AgyChat>();
+builder.Services.AddSingleton<OllamaChat>();
+builder.Services.AddSingleton<AgyChat>();
 builder.Services.AddScoped<WebhookProcessor>();
+
+builder.Services.AddOptions<OllamaOptions>().BindConfiguration(OllamaOptions.SectionName);
 
 var app = builder.Build();
 
@@ -24,7 +27,6 @@ void Log(string level, string component, string message)
 }
 
 void LogInfo(string component, string message) => Log("INFO ", component, message);
-void LogWarn(string component, string message) => Log("WARN ", component, message);
 void LogError(string component, string message) => Log("ERROR", component, message);
 
 // ─── WEBHOOK ENDPOINT ───────────────────────────────────────────────────────
