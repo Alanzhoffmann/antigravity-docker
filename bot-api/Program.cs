@@ -1,111 +1,101 @@
 using System.Diagnostics;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 var builder = WebApplication.CreateBuilder(args);
 var app = builder.Build();
 
+// Configuration
 var supportedRepos = new HashSet<string> { "antigravity-docker" };
 string workspaceBase = "/app/workspaces";
 
-app.MapGet("/", () => "Antigravity Bot API is running. Awaiting GitHub webhooks...");
-
 app.MapPost("/github-webhook", async (HttpContext context) =>
 {
-
-    var eventType = context.Request.Headers["X-Github-Event"].ToString();
+    var eventType = context.Request.Headers["X-GitHub-Event"].ToString();
     using var document = await JsonDocument.ParseAsync(context.Request.Body);
     var root = document.RootElement;
     
-    var repoName = root.GetProperty("repository").GetProperty("name").GetString();
+    // Graceful parsing using TryGetProperty to prevent crashes on malformed payloads
+    if (!root.TryGetProperty("repository", out var repoElement) || 
+        !repoElement.TryGetProperty("name", out var nameElement))
+    {
+        return Results.Ok(new { status = "Ignored: Missing repository data" });
+    }
+
+    var repoName = nameElement.GetString();
     if (string.IsNullOrEmpty(repoName) || !supportedRepos.Contains(repoName))
     {
-        return Results.Ok(new { status = "Ignored unsupported repository" });
+        return Results.Ok(new { status = "Ignored: Unsupported repository" });
     }
 
     var localRepoPath = $"{workspaceBase}/{repoName}";
     var action = root.GetProperty("action").GetString();
 
-    // Ensure the repository exists locally before the agent tries to enter it
+    // Ensure repo exists locally
     if (!Directory.Exists(localRepoPath))
     {
-        var cloneUrl = root.GetProperty("repository").GetProperty("clone_url").GetString();
-        ExecuteShellCommand($"git clone {cloneUrl} {localRepoPath}");
+        var cloneUrl = repoElement.GetProperty("clone_url").GetString();
+        ExecuteProcess("git", workspaceBase, "clone", cloneUrl!, localRepoPath);
+    }
+    else
+    {
+        ExecuteProcess("git", localRepoPath, "pull");
     }
 
     // ─── ISSUE EVENTS (PLANNING & EXECUTION) ─────────────────────────────────
     if (eventType == "issues")
     {
-        var issueNum = root.GetProperty("issue").GetProperty("number").ToString();
-        var sessionName = $"agy_{repoName}_issue_{issueNum}";
-
+        var issueNum = root.GetProperty("issue").GetProperty("number").ToString()!;
+        
         if (action == "opened")
         {
             var title = root.GetProperty("issue").GetProperty("title").GetString();
             var body = root.GetProperty("issue").GetProperty("body").GetString();
             
-            string prompt = $"/goal \"Analyze Issue #{issueNum}: {title}. {body}. Do NOT write code yet. Formulate an implementation plan and use the GitHub CLI (`gh issue comment {issueNum} --body '...'`) to post it. End by asking for a 👍 reaction to execute.\"";
+            string prompt = $"Analyze Issue #{issueNum}: {title}. {body}. Do NOT write code yet. Formulate an implementation plan. End by asking for a 👍 reaction to execute.";
             
-            StartAgySession(sessionName, localRepoPath, prompt);
+            // Run headless agent (new session)
+            string agentOutput = ExecuteAgyHeadless(localRepoPath, prompt);
+            
+            // Extract the newly generated DB ID and append it to the GitHub comment
+            string newSessionId = ExtractConversationId(agentOutput);
+            PostGitHubComment(localRepoPath, issueNum, agentOutput, newSessionId);
         }
         else if (action == "edited" || action == "labeled") 
         {
-            // Triggers when the issue is updated (e.g., a thumbs-up reaction triggers a payload edit)
-            string prompt = $"/goal \"The plan for Issue #{issueNum} is approved. Create branch 'fix/issue-{issueNum}', implement the code, run local verification tests, and raise a PR via `gh pr create`.\"";
-            StartAgySession(sessionName, localRepoPath, prompt);
-        }
-        else if (action == "closed")
-        {
-            // Garbage Collection: The issue is done, tear down the terminal runtime
-            ExecuteShellCommand($"tmux kill-session -t {sessionName}");
+            // Triggered by a 👍 reaction
+            string activeSessionId = GetSessionIdFromIssue(localRepoPath, issueNum);
+            
+            if (!string.IsNullOrEmpty(activeSessionId))
+            {
+                string prompt = $"The plan for Issue #{issueNum} is approved. Create branch 'fix/issue-{issueNum}', implement the code, run local tests, and raise a PR via `gh pr create`.";
+                ExecuteAgyHeadless(localRepoPath, prompt, activeSessionId);
+                // Note: The PR creation is handled autonomously by agy via the prompt instructions
+            }
         }
     }
+    
     // ─── ISSUE COMMENTS (FEEDBACK LOOP) ──────────────────────────────────────
     else if (eventType == "issue_comment" && action == "created")
     {
         var userType = root.GetProperty("comment").GetProperty("user").GetProperty("type").GetString();
-        if (userType != "Bot")
+        
+        if (userType != "Bot") // Prevent infinite bot-looping
         {
-            var issueNum = root.GetProperty("issue").GetProperty("number").ToString();
-            var sessionName = $"agy_{repoName}_issue_{issueNum}";
-            var commentBody = root.GetProperty("comment").GetProperty("body").GetString();
+            var issueNum = root.GetProperty("issue").GetProperty("number").ToString()!;
+            var commentBody = root.GetProperty("comment").GetProperty("body").GetString()!;
             
-            string prompt = $"/goal \"Feedback on Issue #{issueNum}: '{commentBody}'. Update the plan if needed or defend your architectural choices. Reply using `gh issue comment {issueNum}`.\"";
-            ExecuteShellCommand($"tmux send-keys -t {sessionName} \"{prompt}\" Enter");
+            string activeSessionId = GetSessionIdFromIssue(localRepoPath, issueNum);
+            
+            if (!string.IsNullOrEmpty(activeSessionId))
+            {
+                string prompt = $"Feedback received: '{commentBody}'. Please update the plan or code accordingly.";
+                string agentOutput = ExecuteAgyHeadless(localRepoPath, prompt, activeSessionId);
+                
+                // Reply with the same active session ID embedded
+                PostGitHubComment(localRepoPath, issueNum, agentOutput, activeSessionId);
+            }
         }
-    }
-    // ─── PULL REQUEST EVENTS (CODE REVIEW) ───────────────────────────────────
-    else if (eventType == "pull_request")
-    {
-        var prNum = root.GetProperty("pull_request").GetProperty("number").ToString();
-        var sessionName = $"agy_{repoName}_pr_{prNum}";
-
-        if (action == "opened")
-        {
-            string prompt = $"/goal \"PR #{prNum} opened. Checkout with `gh pr checkout {prNum}`, review the diff thoroughly for bugs or missing tests, and post review comments using `gh pr review {prNum}`.\"";
-            StartAgySession(sessionName, localRepoPath, prompt);
-        }
-        else if (action == "closed")
-        {
-            ExecuteShellCommand($"tmux kill-session -t {sessionName}");
-        }
-    }
-    // ─── PULL REQUEST COMMENTS (INLINE FIXES) ────────────────────────────────
-    else if (eventType == "pull_request_review_comment" && action == "created")
-    {
-         var userType = root.GetProperty("comment").GetProperty("user").GetProperty("type").GetString();
-         if (userType != "Bot")
-         {
-             var prNum = root.GetProperty("pull_request").GetProperty("number").ToString();
-             
-             // Route PR fixes back to the dev session that created the PR
-             var sessionName = $"agy_{repoName}_issue_{prNum}"; // Assuming PR number aligns with the issue branch context
-             
-             var commentBody = root.GetProperty("comment").GetProperty("body").GetString();
-             var filePath = root.GetProperty("comment").GetProperty("path").GetString();
-             
-             string prompt = $"/goal \"Fix the codebase based on the PR comment: '{commentBody}' in file `{filePath}`. Verify tests pass and push the changes back to the active branch.\"";
-             ExecuteShellCommand($"tmux send-keys -t {sessionName} \"{prompt}\" Enter");
-         }
     }
 
     return Results.Ok();
@@ -113,81 +103,99 @@ app.MapPost("/github-webhook", async (HttpContext context) =>
 
 app.Run("http://0.0.0.0:8080");
 
-// ─── HELPER FUNCTIONS ────────────────────────────────────────────────────────
 
-void StartAgySession(string sessionName, string path, string initialCommand)
+// ─── NATIVE PROCESS EXECUTION WRAPPERS ──────────────────────────────────────
+
+string ExecuteAgyHeadless(string repoPath, string prompt, string? conversationId = null)
 {
-    var check = Process.Start(new ProcessStartInfo { 
-        FileName = "tmux", 
-        Arguments = $"has-session -t {sessionName}", 
-        RedirectStandardOutput = true 
-    });
-    check!.WaitForExit();
-    
-    if (check.ExitCode != 0)
-    {
-        ExecuteShellCommand($"tmux new-session -d -s {sessionName} bash");
-        Thread.Sleep(500); 
-        
-        ExecuteShellCommand($"tmux send-keys -t {sessionName} \"cd {path}\" Enter");
-        Thread.Sleep(500);
-        
-        ExecuteShellCommand($"tmux send-keys -t {sessionName} \"agy\" Enter");
-        Thread.Sleep(1500); 
-    }
-    
-    // Use the new buffer method to send the complex prompt safely
-    SendPromptViaBuffer(sessionName, initialCommand);
-}
-
-void SendPromptViaBuffer(string sessionName, string promptText)
-{
-    // 1. Write the raw, unescaped text to a temporary file
-    string tempFilePath = Path.GetTempFileName();
-    File.WriteAllText(tempFilePath, promptText);
-
-    // 2. Load the file directly into the tmux clipboard buffer
-    ExecuteShellCommand($"tmux load-buffer {tempFilePath}");
-
-    // 3. Type the /goal command initiator
-    ExecuteShellCommand($"tmux send-keys -t {sessionName} \"/goal \"");
-
-    // 4. Paste the buffer. This bypasses Bash completely and acts as if 
-    // a human physically typed the exact characters into the TUI.
-    ExecuteShellCommand($"tmux paste-buffer -t {sessionName}");
-
-    // 5. Hit Enter to execute, then clean up the temp file
-    ExecuteShellCommand($"tmux send-keys -t {sessionName} Enter");
-    File.Delete(tempFilePath);
-}
-
-void ExecuteShellCommand(string command)
-{
-    var escapedArgs = command.Replace("\"", "\\\"");
-    
     using var process = new Process
     {
         StartInfo = new ProcessStartInfo
         {
-            FileName = "/bin/bash",
-            Arguments = $"-c \"{escapedArgs}\"",
+            FileName = "agy",
+            WorkingDirectory = repoPath,
             RedirectStandardOutput = true,
-            RedirectStandardError = true, // Capture errors to prevent silent failures
+            RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true
         }
     };
 
+    if (!string.IsNullOrEmpty(conversationId))
+    {
+        process.StartInfo.ArgumentList.Add("--conversation");
+        process.StartInfo.ArgumentList.Add(conversationId);
+    }
+
+    process.StartInfo.ArgumentList.Add("-p");
+    process.StartInfo.ArgumentList.Add(prompt);
+
     process.Start();
     
-    // Read the output for logging (optional, but great for debugging)
     string output = process.StandardOutput.ReadToEnd();
     string error = process.StandardError.ReadToEnd();
-    
-    process.WaitForExit(); // THIS IS THE CRITICAL FIX
+    process.WaitForExit();
 
     if (process.ExitCode != 0)
     {
-        Console.WriteLine($"[BASH ERROR] {error}");
+        Console.WriteLine($"[AGY ERROR] {error}");
+        return $"Error executing agent: {error}";
     }
+
+    return output;
+}
+
+string ExecuteProcess(string fileName, string workingDirectory, params string[] args)
+{
+    using var process = new Process
+    {
+        StartInfo = new ProcessStartInfo
+        {
+            FileName = fileName,
+            WorkingDirectory = workingDirectory,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        }
+    };
+
+    foreach (var arg in args)
+    {
+        process.StartInfo.ArgumentList.Add(arg);
+    }
+
+    process.Start();
+    string output = process.StandardOutput.ReadToEnd();
+    process.WaitForExit();
+    
+    return output;
+}
+
+// ─── GITHUB & STATE MANAGEMENT HELPERS ──────────────────────────────────────
+
+void PostGitHubComment(string repoPath, string issueNum, string body, string sessionId)
+{
+    // Append the hidden HTML tracking tag to the bottom of the Markdown body
+    string payload = string.IsNullOrEmpty(sessionId) 
+        ? body 
+        : $"{body}\n\n";
+
+    ExecuteProcess("gh", repoPath, "issue", "comment", issueNum, "--body", payload);
+}
+
+string GetSessionIdFromIssue(string repoPath, string issueNum)
+{
+    // Use GitHub CLI to fetch the last few comments on the issue to find the tracking tag
+    string commentsJson = ExecuteProcess("gh", repoPath, "issue", "view", issueNum, "--json", "comments");
+    
+    var match = Regex.Match(commentsJson, @"", RegexOptions.RightToLeft);
+    return match.Success ? match.Groups[1].Value : string.Empty;
+}
+
+string ExtractConversationId(string agyOutput)
+{
+    // Regex to match a standard UUID format in the agy console output
+    var match = Regex.Match(agyOutput, @"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}");
+    return match.Success ? match.Value : string.Empty;
 }
