@@ -117,18 +117,29 @@ app.Run("http://0.0.0.0:8080");
 
 void StartAgySession(string sessionName, string path, string initialCommand)
 {
-    // Check if session exists. If not, create it and navigate to the project directory.
-    var check = Process.Start(new ProcessStartInfo { FileName = "tmux", Arguments = $"has-session -t {sessionName}", RedirectStandardOutput = true });
+    var check = Process.Start(new ProcessStartInfo { 
+        FileName = "tmux", 
+        Arguments = $"has-session -t {sessionName}", 
+        RedirectStandardOutput = true 
+    });
     check!.WaitForExit();
     
     if (check.ExitCode != 0)
     {
-        ExecuteShellCommand($"tmux new-session -d -s {sessionName} 'agy'");
-        Thread.Sleep(1000); // Allow Antigravity CLI engine time to load and read the shared auth token
+        // 1. Start a persistent bash session instead of binding it directly to 'agy'
+        ExecuteShellCommand($"tmux new-session -d -s {sessionName} bash");
+        Thread.Sleep(500); // Give the tmux socket a moment to initialize
+        
+        // 2. Navigate into the cloned repository BEFORE starting the agent
         ExecuteShellCommand($"tmux send-keys -t {sessionName} \"cd {path}\" Enter");
         Thread.Sleep(500);
+        
+        // 3. Launch Antigravity inside the stable terminal
+        ExecuteShellCommand($"tmux send-keys -t {sessionName} \"agy\" Enter");
+        Thread.Sleep(1500); // Give the agent time to boot up and authenticate
     }
     
+    // 4. Send the actual GitHub task prompt
     ExecuteShellCommand($"tmux send-keys -t {sessionName} \"{initialCommand}\" Enter");
 }
 
