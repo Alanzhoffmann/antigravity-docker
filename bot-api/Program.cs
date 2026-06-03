@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using bot_api;
+using bot_api.Chats;
 
 var builder = WebApplication.CreateBuilder(args);
 

@@ -2,8 +2,9 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using bot_api.Models;
 
-namespace bot_api;
+namespace bot_api.Chats;
 
 public class AgyChat
 {

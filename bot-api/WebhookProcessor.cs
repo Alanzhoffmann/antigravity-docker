@@ -2,6 +2,8 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using bot_api.Chats;
+using bot_api.Models;
 
 namespace bot_api;
 

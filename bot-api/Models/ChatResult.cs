@@ -1,4 +1,4 @@
-namespace bot_api;
+namespace bot_api.Models;
 
 public record ChatResult(string Response, string ConversationId)
 {
