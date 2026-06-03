@@ -64,7 +64,7 @@ public class WebhookProcessor
 INSTRUCTIONS:
 1. Formulate a detailed implementation plan.
 2. Write it to an artifact file called 'implementation_plan.md' (ArtifactType=implementation_plan). This is mandatory.
-3. Post a GitHub comment on issue #{issueNum} summarising the plan.
+3. Answer with a GitHub comment for issue #{issueNum} summarising the plan.
 4. Ask for a 👍 reaction or 'approved' comment to proceed. Do NOT write any code yet.";
 
             _logger.LogInformation($"[Processor] Starting agent for issue #{issueNum}");
