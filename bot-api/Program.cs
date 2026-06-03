@@ -89,25 +89,7 @@ async Task ProcessWebhookAsync(string eventType, string deliveryId, string rawBo
     var action = root.GetStringSafe("action") ?? string.Empty;
     LogInfo("Processor", $"repo='{repoName}' event='{eventType}' action='{action}'");
 
-    var localRepoPath = $"{workspaceBase}/{repoName}";
-
-    // Ensure repo exists locally
-    if (!Directory.Exists(localRepoPath))
-    {
-        var cloneUrl = root.GetNestedStringSafe("repository", "clone_url");
-        if (string.IsNullOrEmpty(cloneUrl))
-        {
-            LogWarn("Processor", "Missing clone_url — cannot clone");
-            return;
-        }
-        LogInfo("Processor", $"Cloning '{cloneUrl}' -> '{localRepoPath}'");
-        ExecuteProcess("git", workspaceBase, "clone", cloneUrl, localRepoPath);
-    }
-    else
-    {
-        LogInfo("Processor", $"Repo exists at '{localRepoPath}', pulling latest");
-        ExecuteProcess("git", localRepoPath, "pull");
-    }
+    var cloneUrl = root.GetNestedStringSafe("repository", "clone_url") ?? string.Empty;
 
     // ─── ISSUE EVENTS ─────────────────────────────────────────────────────────
     if (eventType == "issues" && action == "opened")
@@ -115,13 +97,25 @@ async Task ProcessWebhookAsync(string eventType, string deliveryId, string rawBo
         var issueNum = root.GetNestedStringSafe("issue", "number");
         if (string.IsNullOrEmpty(issueNum)) { LogWarn("Processor", "issues/opened missing issue.number"); return; }
 
+        // Each issue gets its own isolated clone so branches and commits never bleed across issues
+        string localRepoPath = GetIssueRepoPath(repoName, issueNum);
+        EnsureRepo(localRepoPath, cloneUrl, repoName, issueNum);
+
         string issueKey = $"{repoName}#{issueNum}";
         if (inFlightIssues.ContainsKey(issueKey)) { LogWarn("Processor", $"{issueKey} already in-flight — skipping duplicate"); return; }
 
         var title = root.GetNestedStringSafe("issue", "title") ?? string.Empty;
         var body  = root.GetNestedStringSafe("issue", "body")  ?? string.Empty;
 
-        string prompt = $"Analyze Issue #{issueNum}: {title}. {body}. Do NOT write code or modify files yet. Formulate an implementation plan in your standard text response only. End by asking for a 👍 reaction to execute.";
+        string prompt = $@"Analyze Issue #{issueNum}: {title}
+
+{body}
+
+INSTRUCTIONS:
+1. Formulate a detailed implementation plan.
+2. Write it to an artifact file called 'implementation_plan.md' (ArtifactType=implementation_plan). This is mandatory.
+3. Post a GitHub comment on issue #{issueNum} summarising the plan.
+4. Ask for a 👍 reaction or 'approved' comment to proceed. Do NOT write any code yet.";
 
         LogInfo("Processor", $"Starting agent for issue #{issueNum}");
         var task = Task.Run(() =>
@@ -131,11 +125,41 @@ async Task ProcessWebhookAsync(string eventType, string deliveryId, string rawBo
             LogInfo("Processor", $"Issue #{issueNum} session: '{newSessionId}'");
             string cleanResponse = GetFinalResponseFromTranscript(newSessionId);
             if (string.IsNullOrEmpty(cleanResponse)) { LogWarn("Processor", "No transcript response, using raw output"); cleanResponse = agentOutput; }
+
+            // Embed the plan artifact content directly in the comment if available
+            string planContent = TryReadPlanArtifact(newSessionId);
+            if (!string.IsNullOrEmpty(planContent))
+            {
+                LogInfo("Processor", $"Embedding plan artifact in comment for session '{newSessionId}'");
+                cleanResponse = $"{cleanResponse}\n\n---\n\n### 📋 Implementation Plan\n\n{planContent}";
+            }
+            else
+            {
+                LogWarn("Processor", $"No plan artifact found for session '{newSessionId}'");
+            }
             PostGitHubComment(localRepoPath, issueNum, cleanResponse, newSessionId);
         });
         inFlightIssues[issueKey] = task;
         try   { await task; }
         finally { inFlightIssues.TryRemove(issueKey, out _); LogInfo("Processor", $"{issueKey} processing complete"); }
+        return;
+    }
+
+    // ─── REACTION EVENT: Plan approval via 👍 on the issue itself ─────────────
+    if (eventType == "reaction" && action == "created")
+    {
+        var reactionContent = root.GetNestedStringSafe("reaction", "content") ?? string.Empty;
+        LogInfo("Processor", $"Reaction event: content='{reactionContent}'");
+        if (reactionContent == "+1" || reactionContent == "👍")
+        {
+            var issueNum = root.GetNestedStringSafe("issue", "number");
+            if (string.IsNullOrEmpty(issueNum)) { LogWarn("Processor", "reaction event missing issue.number"); return; }
+            string localRepoPath = GetIssueRepoPath(repoName, issueNum);
+            EnsureRepo(localRepoPath, cloneUrl, repoName, issueNum);
+            string sid = GetSessionIdFromIssue(localRepoPath, issueNum);
+            if (!string.IsNullOrEmpty(sid)) await HandleApprovalAsync(localRepoPath, issueNum, sid);
+            else LogWarn("Processor", $"👍 on #{issueNum} but no active session found");
+        }
         return;
     }
 
@@ -150,6 +174,9 @@ async Task ProcessWebhookAsync(string eventType, string deliveryId, string rawBo
         if (string.IsNullOrEmpty(issueNum) || string.IsNullOrEmpty(commentBody))
         { LogWarn("Processor", "issue_comment missing issue.number or comment.body"); return; }
 
+        string localRepoPath = GetIssueRepoPath(repoName, issueNum);
+        EnsureRepo(localRepoPath, cloneUrl, repoName, issueNum);
+
         string activeSessionId = GetSessionIdFromIssue(localRepoPath, issueNum);
         LogInfo("Processor", $"issue_comment #{issueNum} activeSession='{activeSessionId}'");
         if (string.IsNullOrEmpty(activeSessionId)) { LogWarn("Processor", $"No active session for #{issueNum}"); return; }
@@ -158,20 +185,96 @@ async Task ProcessWebhookAsync(string eventType, string deliveryId, string rawBo
                           commentBody.Trim().Equals("lgtm",     StringComparison.OrdinalIgnoreCase) ||
                           commentBody.Trim().Equals("approved", StringComparison.OrdinalIgnoreCase);
 
-        string execPrompt = isApproval
-            ? $"The plan for Issue #{issueNum} is approved. Create branch 'fix/issue-{issueNum}', implement the code, run local tests, and raise a PR via `gh pr create`."
-            : $"Feedback received: '{commentBody}'. Please update the plan or code accordingly.";
+        if (isApproval)
+        {
+            await HandleApprovalAsync(localRepoPath, issueNum, activeSessionId);
+        }
+        else
+        {
+            string execPrompt = $"Feedback received on Issue #{issueNum}: '{commentBody}'. Update the plan accordingly. Post an updated plan artifact and ask for another 👍 to proceed.";
+            LogInfo("Processor", $"Feedback on #{issueNum}: '{commentBody.Substring(0, Math.Min(80, commentBody.Length))}'");
+            string output   = ExecuteAgyHeadless(localRepoPath, execPrompt, activeSessionId);
+            string response = GetFinalResponseFromTranscript(activeSessionId);
+            if (string.IsNullOrEmpty(response)) response = output;
+            PostGitHubComment(localRepoPath, issueNum, response, activeSessionId);
+        }
+        return;
+    }
 
-        LogInfo("Processor", isApproval ? $"Approval on #{issueNum}" : $"Feedback on #{issueNum}: '{commentBody.Substring(0, Math.Min(80, commentBody.Length))}'");
-        string output   = ExecuteAgyHeadless(localRepoPath, execPrompt, activeSessionId);
-        string response = GetFinalResponseFromTranscript(activeSessionId);
-        if (string.IsNullOrEmpty(response)) response = output;
-        PostGitHubComment(localRepoPath, issueNum, response, activeSessionId);
+    // ─── PULL REQUEST MERGED: delete the isolated clone ───────────────────────
+    if (eventType == "pull_request" && action == "closed")
+    {
+        bool merged = root.TryGetProperty("pull_request", out var pr) &&
+                      pr.TryGetProperty("merged", out var m) && m.GetBoolean();
+        if (merged)
+        {
+            string headRef = root.GetNestedStringSafe("pull_request", "head", "ref") ?? string.Empty;
+            LogInfo("Processor", $"PR merged head_ref='{headRef}'");
+            var issueMatch = Regex.Match(headRef, @"fix/issue-(\d+)");
+            if (issueMatch.Success)
+            {
+                string issueNum = issueMatch.Groups[1].Value;
+                string path     = GetIssueRepoPath(repoName, issueNum);
+                if (Directory.Exists(path))
+                {
+                    LogInfo("Processor", $"Deleting isolated clone for issue #{issueNum}: '{path}'");
+                    try   { Directory.Delete(path, recursive: true); LogInfo("Processor", $"Deleted '{path}'"); }
+                    catch (Exception ex) { LogError("Processor", $"Failed to delete '{path}': {ex.Message}"); }
+                }
+            }
+        }
         return;
     }
 
     LogInfo("Processor", $"Unhandled event='{eventType}' action='{action}' — no-op");
     await Task.CompletedTask;
+}
+
+async Task HandleApprovalAsync(string localRepoPath, string issueNum, string sessionId)
+{
+    LogInfo("Approval", $"Plan approved for issue #{issueNum} (session={sessionId}) — starting implementation");
+    string prompt   = $"The plan for Issue #{issueNum} has been approved. Create branch 'fix/issue-{issueNum}', implement the code changes, run any available local tests, and raise a PR via `gh pr create`. Commit only changes related to this issue.";
+    string output   = ExecuteAgyHeadless(localRepoPath, prompt, sessionId);
+    string response = GetFinalResponseFromTranscript(sessionId);
+    if (string.IsNullOrEmpty(response)) response = output;
+    PostGitHubComment(localRepoPath, issueNum, response, sessionId);
+    LogInfo("Approval", $"Implementation complete for issue #{issueNum}");
+    await Task.CompletedTask;
+}
+
+string GetIssueRepoPath(string repoName, string issueNum)
+    => $"{workspaceBase}/{repoName}-issue-{issueNum}";
+
+void EnsureRepo(string localRepoPath, string cloneUrl, string repoName, string issueNum)
+{
+    if (!Directory.Exists(localRepoPath))
+    {
+        if (string.IsNullOrEmpty(cloneUrl)) { LogWarn("RepoManager", $"No clone_url for {repoName}#{issueNum}"); return; }
+        LogInfo("RepoManager", $"Cloning '{cloneUrl}' -> '{localRepoPath}'");
+        ExecuteProcess("git", workspaceBase, "clone", cloneUrl, localRepoPath);
+    }
+    else
+    {
+        LogInfo("RepoManager", $"Pulling latest in '{localRepoPath}'");
+        ExecuteProcess("git", localRepoPath, "pull");
+    }
+}
+
+string TryReadPlanArtifact(string sessionId)
+{
+    if (string.IsNullOrEmpty(sessionId)) return string.Empty;
+    string dir = $"/root/.gemini/antigravity-cli/brain/{sessionId}";
+    if (!Directory.Exists(dir)) { LogWarn("Artifact", $"Artifact dir not found: '{dir}'"); return string.Empty; }
+    var candidates = Directory.GetFiles(dir, "implementation_plan.md", SearchOption.TopDirectoryOnly)
+        .Concat(Directory.GetFiles(dir, "*.md", SearchOption.TopDirectoryOnly)).ToArray();
+    if (candidates.Length == 0) { LogWarn("Artifact", $"No markdown artifacts in '{dir}'"); return string.Empty; }
+    try
+    {
+        string content = File.ReadAllText(candidates[0]);
+        LogInfo("Artifact", $"Read plan artifact '{candidates[0]}': {content.Length} chars");
+        return content;
+    }
+    catch (Exception ex) { LogError("Artifact", $"Failed reading artifact: {ex.Message}"); return string.Empty; }
 }
 
 
