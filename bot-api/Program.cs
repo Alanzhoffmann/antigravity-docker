@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -8,6 +9,9 @@ var app = builder.Build();
 // ─── CONFIGURATION ────────────────────────────────────────────────────────────
 var supportedRepos = new HashSet<string> { "antigravity-docker" };
 string workspaceBase = "/app/workspaces";
+
+// Deduplicate in-flight issue processing tasks
+var inFlightIssues = new ConcurrentDictionary<string, Task>();
 
 // ─── LOGGING HELPERS ──────────────────────────────────────────────────────────
 
@@ -20,168 +24,155 @@ void LogInfo(string component, string message) => Log("INFO ", component, messag
 void LogWarn(string component, string message) => Log("WARN ", component, message);
 void LogError(string component, string message) => Log("ERROR", component, message);
 
-// ─── WEBHOOK ENDPOINT ─────────────────────────────────────────────────────────
+// ─── WEBHOOK ENDPOINT ───────────────────────────────────────────────────────
+// Returns 202 immediately so GitHub never times out; real work runs in background.
 
 app.MapPost("/github-webhook", async (HttpContext context) =>
 {
+    var eventType  = context.Request.Headers["X-GitHub-Event"].ToString();
+    var deliveryId = context.Request.Headers["X-GitHub-Delivery"].ToString();
+    LogInfo("Webhook", $"Received event='{eventType}' delivery='{deliveryId}'");
+
+    // Buffer the full body before doing anything — the stream is disposed once
+    // we return the HTTP response, so the background task needs its own copy.
+    string rawBody;
     try
     {
-        var eventType = context.Request.Headers["X-GitHub-Event"].ToString();
-        var deliveryId = context.Request.Headers["X-GitHub-Delivery"].ToString();
-        LogInfo("Webhook", $"Received event='{eventType}' delivery='{deliveryId}'");
+        using var reader = new StreamReader(context.Request.Body);
+        rawBody = await reader.ReadToEndAsync();
+    }
+    catch (Exception ex)
+    {
+        LogError("Webhook", $"Failed to read request body: {ex.Message}");
+        return Results.BadRequest(new { error = "Failed to read body" });
+    }
 
-        using var document = await JsonDocument.ParseAsync(context.Request.Body);
-        var root = document.RootElement;
-
-        var repoName = root.GetNestedStringSafe("repository", "name");
-        if (string.IsNullOrEmpty(repoName) || !supportedRepos.Contains(repoName))
-        {
-            LogInfo("Webhook", $"Ignoring unsupported/missing repo: '{repoName}'");
-            return Results.Ok(new { status = "Ignored: Missing or unsupported repository" });
-        }
-
-        var localRepoPath = $"{workspaceBase}/{repoName}";
-        var action = root.GetStringSafe("action");
-        LogInfo("Webhook", $"repo='{repoName}' action='{action}'");
-
-        // Ensure repo exists locally
-        if (!Directory.Exists(localRepoPath))
-        {
-            var cloneUrl = root.GetNestedStringSafe("repository", "clone_url");
-            if (string.IsNullOrEmpty(cloneUrl))
-            {
-                LogWarn("Webhook", "Missing clone_url in repository payload.");
-                return Results.BadRequest(new { error = "Missing clone_url" });
-            }
-            LogInfo("Webhook", $"Cloning '{cloneUrl}' -> '{localRepoPath}'");
-            ExecuteProcess("git", workspaceBase, "clone", cloneUrl, localRepoPath);
-        }
-        else
-        {
-            LogInfo("Webhook", $"Repo exists at '{localRepoPath}', pulling latest");
-            ExecuteProcess("git", localRepoPath, "pull");
-        }
-
-        // ─── ISSUE EVENTS (PLANNING & EXECUTION) ─────────────────────────────────
-        if (eventType == "issues")
-        {
-            var issueNum = root.GetNestedStringSafe("issue", "number");
-            if (string.IsNullOrEmpty(issueNum))
-            {
-                LogWarn("Webhook", "Received 'issues' event but 'issue.number' is missing.");
-                return Results.Ok(new { status = "Ignored: Missing issue number" });
-            }
-
-            if (action == "opened")
-            {
-                var title = root.GetNestedStringSafe("issue", "title") ?? string.Empty;
-                var body = root.GetNestedStringSafe("issue", "body") ?? string.Empty;
-
-                string prompt = $"Analyze Issue #{issueNum}: {title}. {body}. Do NOT write code or create/modify any files/artifacts yet (do NOT write implementation_plan.md or any other markdown files). Formulate an implementation plan in your standard text response only. End by asking for a 👍 reaction to execute.";
-
-                LogInfo("Webhook", $"Starting agent for issue #{issueNum}");
-                string agentOutput = ExecuteAgyHeadless(localRepoPath, prompt);
-
-                string newSessionId = ExtractConversationId(agentOutput);
-                LogInfo("Webhook", $"Issue #{issueNum} session: '{newSessionId}'");
-
-                string cleanResponse = GetFinalResponseFromTranscript(newSessionId);
-                if (string.IsNullOrEmpty(cleanResponse))
-                {
-                    LogWarn("Webhook", $"No transcript response found for session '{newSessionId}', using raw output");
-                    cleanResponse = agentOutput;
-                }
-                PostGitHubComment(localRepoPath, issueNum, cleanResponse, newSessionId);
-            }
-            else if (action == "edited" || action == "labeled")
-            {
-                string activeSessionId = GetSessionIdFromIssue(localRepoPath, issueNum);
-                LogInfo("Webhook", $"Issue #{issueNum} action='{action}' activeSession='{activeSessionId}'");
-
-                if (!string.IsNullOrEmpty(activeSessionId))
-                {
-                    string prompt = $"The plan for Issue #{issueNum} is approved. Create branch 'fix/issue-{issueNum}', implement the code, run local tests, and raise a PR via `gh pr create`.";
-                    ExecuteAgyHeadless(localRepoPath, prompt, activeSessionId);
-                }
-            }
-        }
-
-        // ─── ISSUE COMMENTS (FEEDBACK LOOP) ──────────────────────────────────────
-        else if (eventType == "issue_comment" && action == "created")
-        {
-            var userType = root.GetNestedStringSafe("comment", "user", "type");
-
-            if (userType != "Bot") // Prevent infinite bot-looping
-            {
-                var issueNum = root.GetNestedStringSafe("issue", "number");
-                var commentBody = root.GetNestedStringSafe("comment", "body");
-
-                if (string.IsNullOrEmpty(issueNum) || string.IsNullOrEmpty(commentBody))
-                {
-                    LogWarn("Webhook", "Received 'issue_comment' event but 'issue.number' or 'comment.body' is missing.");
-                    return Results.Ok(new { status = "Ignored: Missing issue or comment data" });
-                }
-
-                string activeSessionId = GetSessionIdFromIssue(localRepoPath, issueNum);
-                LogInfo("Webhook", $"issue_comment on #{issueNum} activeSession='{activeSessionId}'");
-
-                if (!string.IsNullOrEmpty(activeSessionId))
-                {
-                    bool isApproval = commentBody.Trim() == "👍" ||
-                                       commentBody.Trim().Equals("lgtm", StringComparison.OrdinalIgnoreCase) ||
-                                       commentBody.Trim().Equals("approved", StringComparison.OrdinalIgnoreCase);
-
-                    string prompt;
-                    if (isApproval)
-                    {
-                        LogInfo("Webhook", $"Approval detected for issue #{issueNum}");
-                        prompt = $"The plan for Issue #{issueNum} is approved. Create branch 'fix/issue-{issueNum}', implement the code, run local tests, and raise a PR via `gh pr create`.";
-                    }
-                    else
-                    {
-                        LogInfo("Webhook", $"Feedback comment on issue #{issueNum}: '{commentBody.Substring(0, Math.Min(80, commentBody.Length))}'");
-                        prompt = $"Feedback received: '{commentBody}'. Please update the plan or code accordingly.";
-                    }
-
-                    string agentOutput = ExecuteAgyHeadless(localRepoPath, prompt, activeSessionId);
-                    string cleanResponse = GetFinalResponseFromTranscript(activeSessionId);
-                    if (string.IsNullOrEmpty(cleanResponse))
-                    {
-                        cleanResponse = agentOutput;
-                    }
-
-                    PostGitHubComment(localRepoPath, issueNum, cleanResponse, activeSessionId);
-                }
-                else
-                {
-                    LogWarn("Webhook", $"No active session found for issue #{issueNum}, ignoring comment");
-                }
-            }
-            else
-            {
-                LogInfo("Webhook", "Skipping Bot comment to prevent loop");
-            }
-        }
-        else
-        {
-            LogInfo("Webhook", $"Unhandled event='{eventType}' action='{action}' — no-op");
-        }
-
-        return Results.Ok(new { status = "Success" });
+    JsonElement root;
+    try
+    {
+        using var doc = JsonDocument.Parse(rawBody);
+        root = doc.RootElement.Clone(); // Clone so we can use after doc is disposed
     }
     catch (JsonException ex)
     {
         LogError("Webhook", $"Invalid JSON payload: {ex.Message}");
         return Results.BadRequest(new { error = "Invalid JSON payload" });
     }
-    catch (Exception ex)
+
+    var repoName = root.GetNestedStringSafe("repository", "name");
+    if (string.IsNullOrEmpty(repoName) || !supportedRepos.Contains(repoName))
     {
-        LogError("Webhook", $"Unexpected error: {ex.Message}\n{ex.StackTrace}");
-        return Results.Ok(new { status = "Error", message = "An unexpected error occurred" });
+        LogInfo("Webhook", $"Ignoring unsupported/missing repo: '{repoName}'");
+        return Results.Ok(new { status = "Ignored: unsupported repository" });
     }
+
+    // Fire-and-forget — GitHub gets 202 in milliseconds, no timeout risk.
+    _ = Task.Run(async () =>
+    {
+        try { await ProcessWebhookAsync(eventType, deliveryId, rawBody, repoName); }
+        catch (Exception ex) { LogError("Processor", $"Unhandled exception: {ex.Message}\n{ex.StackTrace}"); }
+    });
+
+    return Results.Accepted(value: new { status = "Accepted", delivery = deliveryId });
 });
 
 app.Run("http://0.0.0.0:8080");
+
+
+// ─── BACKGROUND WEBHOOK PROCESSOR ────────────────────────────────────────────
+
+async Task ProcessWebhookAsync(string eventType, string deliveryId, string rawBody, string repoName)
+{
+    LogInfo("Processor", $"Processing event='{eventType}' action delivery='{deliveryId}'");
+    using var document = JsonDocument.Parse(rawBody);
+    var root = document.RootElement;
+    var action = root.GetStringSafe("action") ?? string.Empty;
+    LogInfo("Processor", $"repo='{repoName}' event='{eventType}' action='{action}'");
+
+    var localRepoPath = $"{workspaceBase}/{repoName}";
+
+    // Ensure repo exists locally
+    if (!Directory.Exists(localRepoPath))
+    {
+        var cloneUrl = root.GetNestedStringSafe("repository", "clone_url");
+        if (string.IsNullOrEmpty(cloneUrl))
+        {
+            LogWarn("Processor", "Missing clone_url — cannot clone");
+            return;
+        }
+        LogInfo("Processor", $"Cloning '{cloneUrl}' -> '{localRepoPath}'");
+        ExecuteProcess("git", workspaceBase, "clone", cloneUrl, localRepoPath);
+    }
+    else
+    {
+        LogInfo("Processor", $"Repo exists at '{localRepoPath}', pulling latest");
+        ExecuteProcess("git", localRepoPath, "pull");
+    }
+
+    // ─── ISSUE EVENTS ─────────────────────────────────────────────────────────
+    if (eventType == "issues" && action == "opened")
+    {
+        var issueNum = root.GetNestedStringSafe("issue", "number");
+        if (string.IsNullOrEmpty(issueNum)) { LogWarn("Processor", "issues/opened missing issue.number"); return; }
+
+        string issueKey = $"{repoName}#{issueNum}";
+        if (inFlightIssues.ContainsKey(issueKey)) { LogWarn("Processor", $"{issueKey} already in-flight — skipping duplicate"); return; }
+
+        var title = root.GetNestedStringSafe("issue", "title") ?? string.Empty;
+        var body  = root.GetNestedStringSafe("issue", "body")  ?? string.Empty;
+
+        string prompt = $"Analyze Issue #{issueNum}: {title}. {body}. Do NOT write code or modify files yet. Formulate an implementation plan in your standard text response only. End by asking for a 👍 reaction to execute.";
+
+        LogInfo("Processor", $"Starting agent for issue #{issueNum}");
+        var task = Task.Run(() =>
+        {
+            string agentOutput  = ExecuteAgyHeadless(localRepoPath, prompt);
+            string newSessionId = ExtractConversationId(agentOutput);
+            LogInfo("Processor", $"Issue #{issueNum} session: '{newSessionId}'");
+            string cleanResponse = GetFinalResponseFromTranscript(newSessionId);
+            if (string.IsNullOrEmpty(cleanResponse)) { LogWarn("Processor", "No transcript response, using raw output"); cleanResponse = agentOutput; }
+            PostGitHubComment(localRepoPath, issueNum, cleanResponse, newSessionId);
+        });
+        inFlightIssues[issueKey] = task;
+        try   { await task; }
+        finally { inFlightIssues.TryRemove(issueKey, out _); LogInfo("Processor", $"{issueKey} processing complete"); }
+        return;
+    }
+
+    // ─── ISSUE COMMENTS (FEEDBACK / APPROVAL) ────────────────────────────────
+    if (eventType == "issue_comment" && action == "created")
+    {
+        var userType = root.GetNestedStringSafe("comment", "user", "type");
+        if (userType == "Bot") { LogInfo("Processor", "Skipping Bot comment to prevent loop"); return; }
+
+        var issueNum    = root.GetNestedStringSafe("issue", "number");
+        var commentBody = root.GetNestedStringSafe("comment", "body");
+        if (string.IsNullOrEmpty(issueNum) || string.IsNullOrEmpty(commentBody))
+        { LogWarn("Processor", "issue_comment missing issue.number or comment.body"); return; }
+
+        string activeSessionId = GetSessionIdFromIssue(localRepoPath, issueNum);
+        LogInfo("Processor", $"issue_comment #{issueNum} activeSession='{activeSessionId}'");
+        if (string.IsNullOrEmpty(activeSessionId)) { LogWarn("Processor", $"No active session for #{issueNum}"); return; }
+
+        bool isApproval = commentBody.Trim() == "👍" ||
+                          commentBody.Trim().Equals("lgtm",     StringComparison.OrdinalIgnoreCase) ||
+                          commentBody.Trim().Equals("approved", StringComparison.OrdinalIgnoreCase);
+
+        string execPrompt = isApproval
+            ? $"The plan for Issue #{issueNum} is approved. Create branch 'fix/issue-{issueNum}', implement the code, run local tests, and raise a PR via `gh pr create`."
+            : $"Feedback received: '{commentBody}'. Please update the plan or code accordingly.";
+
+        LogInfo("Processor", isApproval ? $"Approval on #{issueNum}" : $"Feedback on #{issueNum}: '{commentBody.Substring(0, Math.Min(80, commentBody.Length))}'");
+        string output   = ExecuteAgyHeadless(localRepoPath, execPrompt, activeSessionId);
+        string response = GetFinalResponseFromTranscript(activeSessionId);
+        if (string.IsNullOrEmpty(response)) response = output;
+        PostGitHubComment(localRepoPath, issueNum, response, activeSessionId);
+        return;
+    }
+
+    LogInfo("Processor", $"Unhandled event='{eventType}' action='{action}' — no-op");
+    await Task.CompletedTask;
+}
 
 
 // ─── NATIVE PROCESS EXECUTION WRAPPERS ──────────────────────────────────────
