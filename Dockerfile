@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/dotnet/nightly/sdk:11.0-preview
+FROM mcr.microsoft.com/dotnet/nightly/sdk:11.0-preview as builder
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -25,8 +25,21 @@ RUN git config --global user.name "Antigravity Bot" \
 
 # Setup the workspace and API
 WORKDIR /app
-COPY PersonalBot.Api/ /app/PersonalBot.Api/
+COPY ./*.slnx ./nuget.config ./
 
-# Expose port for webhook ingestion
-EXPOSE 8080
-CMD ["dotnet", "run", "--project", "/app/PersonalBot.Api/PersonalBot.Api.csproj"]
+COPY src/*/*.csproj ./
+RUN for file in $(ls *.csproj); do mkdir -p src/${file%.*}/ && mv $file src/${file%.*}/; done
+
+# COPY test/*/*.csproj ./
+# RUN for file in $(ls *.csproj); do mkdir -p test/${file%.*}/ && mv $file test/${file%.*}/; done
+
+RUN dotnet restore
+
+COPY ./test ./test
+COPY ./src ./src
+
+RUN dotnet build -c Release
+
+RUN dotnet publish "./src/PersonalBot.Api/PersonalBot.Api.csproj" -c Release -o "./dist" --no-restore
+
+ENTRYPOINT ["dotnet", "./dist/PersonalBot.Api.dll"]
