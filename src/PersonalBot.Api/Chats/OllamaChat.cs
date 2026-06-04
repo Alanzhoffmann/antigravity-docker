@@ -1,10 +1,10 @@
 using System.Diagnostics.CodeAnalysis;
-using PersonalBot.Api.Interfaces;
-using PersonalBot.Api.Models;
-using PersonalBot.Api.Options;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Options;
 using OllamaSharp;
+using PersonalBot.Api.Interfaces;
+using PersonalBot.Api.Models;
+using PersonalBot.Api.Options;
 
 namespace PersonalBot.Api.Chats;
 

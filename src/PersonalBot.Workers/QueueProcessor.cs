@@ -1,4 +1,6 @@
-namespace PersonalBot.Api.BackgroundWorkers;
+using Microsoft.Extensions.Hosting;
+
+namespace PersonalBot.Workers;
 
 public class QueueProcessor : BackgroundService
 {

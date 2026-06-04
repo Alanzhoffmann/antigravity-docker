@@ -2,10 +2,10 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Microsoft.Extensions.Options;
 using PersonalBot.Api.Interfaces;
 using PersonalBot.Api.Models;
 using PersonalBot.Api.Options;
-using Microsoft.Extensions.Options;
 
 namespace PersonalBot.Api.Chats;
 

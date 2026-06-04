@@ -1,11 +1,11 @@
 using System.Diagnostics;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using PersonalBot.Api;
 using PersonalBot.Api.Chats;
 using PersonalBot.Api.Interfaces;
 using PersonalBot.Api.Options;
-using Microsoft.Extensions.DependencyInjection.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
 
