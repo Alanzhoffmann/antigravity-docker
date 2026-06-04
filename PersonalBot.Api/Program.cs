@@ -1,17 +1,20 @@
 using System.Diagnostics;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using bot_api;
-using bot_api.Chats;
-using bot_api.Interfaces;
-using bot_api.Options;
+using PersonalBot.Api;
+using PersonalBot.Api.Chats;
+using PersonalBot.Api.Interfaces;
+using PersonalBot.Api.Options;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.Services.TryAddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<IAgentChat, OllamaChat>();
 builder.Services.AddSingleton<IAgentChat, AgyChat>();
 builder.Services.AddSingleton<IAgentChat, NullChat>();
 builder.Services.AddScoped<WebhookProcessor>();
+builder.Services.AddTransient<ArtifactParser>();
 
 builder.Services.AddOptions<OllamaOptions>().BindConfiguration(OllamaOptions.SectionName);
 builder.Services.AddOptions<AgyOptions>().BindConfiguration(AgyOptions.SectionName);

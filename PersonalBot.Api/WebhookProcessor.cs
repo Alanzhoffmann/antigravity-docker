@@ -2,10 +2,10 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using bot_api.Interfaces;
-using bot_api.Models;
+using PersonalBot.Api.Interfaces;
+using PersonalBot.Api.Models;
 
-namespace bot_api;
+namespace PersonalBot.Api;
 
 public class WebhookProcessor
 {

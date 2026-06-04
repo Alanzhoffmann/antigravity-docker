@@ -2,7 +2,7 @@ FROM mcr.microsoft.com/dotnet/nightly/sdk:11.0-preview
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
-    curl git jq tmux \
+    curl git jq \
     && rm -rf /var/lib/apt/lists/*
 
 # Install GitHub CLI (gh) for programmatic PR and Issue handling
@@ -25,8 +25,8 @@ RUN git config --global user.name "Antigravity Bot" \
 
 # Setup the workspace and API
 WORKDIR /app
-COPY bot-api/ /app/bot-api/
+COPY PersonalBot.Api/ /app/PersonalBot.Api/
 
 # Expose port for webhook ingestion
 EXPOSE 8080
-CMD ["dotnet", "run", "--project", "/app/bot-api/bot-api.csproj"]
+CMD ["dotnet", "run", "--project", "/app/PersonalBot.Api/PersonalBot.Api.csproj"]

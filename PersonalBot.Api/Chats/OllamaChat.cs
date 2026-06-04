@@ -1,12 +1,12 @@
 using System.Diagnostics.CodeAnalysis;
-using bot_api.Interfaces;
-using bot_api.Models;
-using bot_api.Options;
+using PersonalBot.Api.Interfaces;
+using PersonalBot.Api.Models;
+using PersonalBot.Api.Options;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Options;
 using OllamaSharp;
 
-namespace bot_api.Chats;
+namespace PersonalBot.Api.Chats;
 
 public class OllamaChat : IAgentChat
 {

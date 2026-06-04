@@ -1,6 +1,6 @@
-using bot_api.Models;
+using PersonalBot.Api.Models;
 
-namespace bot_api.Interfaces;
+namespace PersonalBot.Api.Interfaces;
 
 public interface IAgentChat
 {

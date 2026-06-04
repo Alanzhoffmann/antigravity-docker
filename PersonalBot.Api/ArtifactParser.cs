@@ -1,4 +1,4 @@
-namespace bot_api;
+namespace PersonalBot.Api;
 
 public class ArtifactParser
 {

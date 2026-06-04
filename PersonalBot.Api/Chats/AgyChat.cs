@@ -2,12 +2,12 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using bot_api.Interfaces;
-using bot_api.Models;
-using bot_api.Options;
+using PersonalBot.Api.Interfaces;
+using PersonalBot.Api.Models;
+using PersonalBot.Api.Options;
 using Microsoft.Extensions.Options;
 
-namespace bot_api.Chats;
+namespace PersonalBot.Api.Chats;
 
 public class AgyChat : IAgentChat
 {

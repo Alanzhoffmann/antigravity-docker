@@ -1,4 +1,4 @@
-namespace bot_api.Options;
+namespace PersonalBot.Api.Options;
 
 public class AgyOptions
 {
