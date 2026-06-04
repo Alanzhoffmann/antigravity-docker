@@ -13,19 +13,33 @@ public class AgyChat : IAgentChat
 {
     private readonly ILogger<AgyChat> _logger;
     private readonly IOptionsMonitor<AgyOptions> _optionsMonitor;
+    private readonly ArtifactParser _artifactParser;
+    private readonly TimeProvider _timeProvider;
+    private DateTimeOffset _lastExhaustedTokenTime = DateTime.MinValue;
 
-    public AgyChat(IOptionsMonitor<AgyOptions> optionsMonitor, ILogger<AgyChat> logger)
+    public AgyChat(IOptionsMonitor<AgyOptions> optionsMonitor, ArtifactParser artifactParser, TimeProvider timeProvider, ILogger<AgyChat> logger)
     {
         _optionsMonitor = optionsMonitor;
+        _artifactParser = artifactParser;
+        _timeProvider = timeProvider;
         _logger = logger;
     }
 
-    // TODO disable when quota exceeded
-    public bool IsEnabled => _optionsMonitor.CurrentValue.IsEnabled;
+    public bool IsEnabled => _optionsMonitor.CurrentValue.IsEnabled && (_lastExhaustedTokenTime - _timeProvider.GetUtcNow()).TotalSeconds > 600;
 
-    public async Task<ChatResult> GetResponseAsync(string repoPath, string issueNum, string prompt)
+    public async Task<ChatResult> GetResponseAsync(string repoPath, string issueNum, string prompt, CancellationToken cancellationToken = default)
     {
-        string agentOutput = ExecuteAgyHeadless(repoPath, prompt);
+        (string agentOutput, string? log) = await ExecuteAgyHeadless(repoPath, prompt);
+
+        if (string.IsNullOrEmpty(agentOutput))
+        {
+            var hasExhaustedError = log?.Contains("RESOURCE_EXHAUSTED (code 429): Individual quota reached") ?? false;
+            if (hasExhaustedError)
+            {
+                _lastExhaustedTokenTime = _timeProvider.GetUtcNow();
+            }
+        }
+
         string newSessionId = ExtractConversationId(agentOutput);
         _logger.LogInformation($"[Processor] Issue #{issueNum} session: '{newSessionId}'");
         string cleanResponse = GetFinalResponseFromTranscript(newSessionId);
@@ -36,7 +50,7 @@ public class AgyChat : IAgentChat
         }
 
         // Embed the plan artifact content directly in the comment if available
-        string planContent = TryReadPlanArtifact(newSessionId);
+        string planContent = await TryReadPlanArtifact(newSessionId);
         if (string.IsNullOrEmpty(planContent))
         {
             _logger.LogWarning($"[Processor] No plan artifact found for session '{newSessionId}'");
@@ -45,8 +59,20 @@ public class AgyChat : IAgentChat
         return new ChatResult(cleanResponse, newSessionId, planContent);
     }
 
-    private string ExecuteAgyHeadless(string repoPath, string prompt, string? conversationId = null)
+    private async Task<(string output, string? log)> ExecuteAgyHeadless(
+        string repoPath,
+        string prompt,
+        string? conversationId = null,
+        CancellationToken cancellationToken = default
+    )
     {
+        const string logFileName = "agy-logging.log";
+        if (File.Exists(logFileName))
+        {
+            _logger.LogInformation("Deleting existing log file");
+            File.Delete(logFileName);
+        }
+
         _logger.LogInformation($"[AgyRunner] Starting agy session='{conversationId ?? "new"}' cwd='{repoPath}'");
 
         using var process = new Process
@@ -71,6 +97,9 @@ public class AgyChat : IAgentChat
         process.StartInfo.ArgumentList.Add("-p");
         process.StartInfo.ArgumentList.Add(prompt);
 
+        process.StartInfo.ArgumentList.Add("--log-file");
+        process.StartInfo.ArgumentList.Add(logFileName);
+
         var sw = Stopwatch.StartNew();
         process.Start();
 
@@ -84,13 +113,19 @@ public class AgyChat : IAgentChat
         if (!string.IsNullOrEmpty(error))
             _logger.LogWarning($"[AgyRunner] stderr: {error.Trim()}");
 
+        string? logOutput = null;
+        if (File.Exists(logFileName))
+        {
+            logOutput = await File.ReadAllTextAsync(logFileName, cancellationToken);
+        }
+
         if (process.ExitCode != 0)
         {
             _logger.LogError($"[AgyRunner] agy failed: {error.Trim()}");
-            return $"Error executing agent: {error}";
+            return ($"Error executing agent: {error}", logOutput);
         }
 
-        return output;
+        return (output, logOutput);
     }
 
     string ExtractConversationId(string agyOutput)
@@ -156,35 +191,11 @@ public class AgyChat : IAgentChat
         return finalContent;
     }
 
-    string TryReadPlanArtifact(string sessionId)
+    private async Task<string> TryReadPlanArtifact(string sessionId)
     {
         if (string.IsNullOrEmpty(sessionId))
             return string.Empty;
         string dir = $"/root/.gemini/antigravity-cli/brain/{sessionId}";
-        if (!Directory.Exists(dir))
-        {
-            _logger.LogWarning($"[Artifact] Artifact dir not found: '{dir}'");
-            return string.Empty;
-        }
-        var candidates = Directory
-            .GetFiles(dir, "implementation_plan.md", SearchOption.TopDirectoryOnly)
-            .Concat(Directory.GetFiles(dir, "*.md", SearchOption.TopDirectoryOnly))
-            .ToArray();
-        if (candidates.Length == 0)
-        {
-            _logger.LogWarning($"[Artifact] No markdown artifacts in '{dir}'");
-            return string.Empty;
-        }
-        try
-        {
-            string content = File.ReadAllText(candidates[0]);
-            _logger.LogInformation($"[Artifact] Read plan artifact '{candidates[0]}': {content.Length} chars");
-            return content;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError($"[Artifact] Failed reading artifact: {ex.Message}");
-            return string.Empty;
-        }
+        return await _artifactParser.TryReadPlanArtifact(dir);
     }
 }

@@ -12,12 +12,14 @@ public class OllamaChat : IAgentChat
 {
     private readonly ILogger<OllamaChat> _logger;
     private readonly IOptionsMonitor<OllamaOptions> _optionsMonitor;
+    private readonly ArtifactParser _artifactParser;
     private readonly Dictionary<string, List<ChatMessage>> _conversationHistories = new();
 
-    public OllamaChat(IOptionsMonitor<OllamaOptions> optionsMonitor, ILogger<OllamaChat> logger)
+    public OllamaChat(IOptionsMonitor<OllamaOptions> optionsMonitor, ArtifactParser artifactParser, ILogger<OllamaChat> logger)
     {
-        _logger = logger;
         _optionsMonitor = optionsMonitor;
+        _artifactParser = artifactParser;
+        _logger = logger;
     }
 
     private string? Model => _optionsMonitor.CurrentValue.Model;
@@ -28,7 +30,7 @@ public class OllamaChat : IAgentChat
 
     public int SortOrder => 1;
 
-    public async Task<ChatResult> GetResponseAsync(string repoPath, string issueNum, string prompt)
+    public async Task<ChatResult> GetResponseAsync(string repoPath, string issueNum, string prompt, CancellationToken cancellationToken = default)
     {
         if (!IsEnabled)
         {
@@ -50,6 +52,7 @@ public class OllamaChat : IAgentChat
             };
             _conversationHistories[issueNum] = chatHistory;
         }
+
         // Get user prompt and add to chat history
         _logger.LogInformation($"[OllamaChat] User prompt for issue #{issueNum}: '{prompt}'");
         chatHistory.Add(new ChatMessage(ChatRole.User, prompt));
@@ -65,18 +68,6 @@ public class OllamaChat : IAgentChat
         _logger.LogInformation($"[OllamaChat] Full response for issue #{issueNum}: '{response}'");
 
         chatHistory.Add(new ChatMessage(ChatRole.Assistant, response));
-        return new ChatResult(response, issueNum, await GetArtifactOutputAsync(repoPath, issueNum));
-    }
-
-    private async Task<string> GetArtifactOutputAsync(string repoPath, string sessionId)
-    {
-        var file = Directory.GetFiles(repoPath, "*plan*", SearchOption.AllDirectories).FirstOrDefault();
-        if (file == null)
-        {
-            _logger.LogWarning($"[OllamaChat] Plan artifact not found for session '{sessionId}'");
-            return string.Empty;
-        }
-
-        return await File.ReadAllTextAsync(file);
+        return new ChatResult(response, issueNum, await _artifactParser.TryReadPlanArtifact(repoPath));
     }
 }
