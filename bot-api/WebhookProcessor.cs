@@ -72,9 +72,9 @@ INSTRUCTIONS:
             _logger.LogInformation($"[Processor] Starting agent for issue #{issueNum}");
             var task = Task.Run(async () =>
             {
-                (string cleanResponse, string newSessionId) = await _agentChat.GetResponseAsync(localRepoPath, issueNum, prompt);
-
-                PostGitHubComment(localRepoPath, issueNum, cleanResponse, newSessionId);
+                (string cleanResponse, string newSessionId, string? artifactOutput) = await _agentChat.GetResponseAsync(localRepoPath, issueNum, prompt);
+                var comment = !string.IsNullOrEmpty(artifactOutput) ? artifactOutput : cleanResponse;
+                PostGitHubComment(localRepoPath, issueNum, comment, newSessionId);
             });
             inFlightIssues[issueKey] = task;
             try
@@ -157,7 +157,8 @@ INSTRUCTIONS:
                     $"Feedback received on Issue #{issueNum}: '{commentBody}'. Update the plan accordingly. Post an updated plan artifact and ask for another 👍 to proceed.";
                 _logger.LogInformation($"[Processor] Feedback on #{issueNum}: '{commentBody.Substring(0, Math.Min(80, commentBody.Length))}'");
                 var response = await _agentChat.GetResponseAsync(localRepoPath, issueNum, execPrompt);
-                PostGitHubComment(localRepoPath, issueNum, response, activeSessionId);
+                var comment = !string.IsNullOrEmpty(response.ArtifactOutput) ? response.ArtifactOutput : response.Output;
+                PostGitHubComment(localRepoPath, issueNum, comment, activeSessionId);
             }
             return;
         }

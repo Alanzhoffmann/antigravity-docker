@@ -17,6 +17,6 @@ public class NullChat : IAgentChat
 
     public Task<ChatResult> GetResponseAsync(string repoPath, string issueNum, string prompt)
     {
-        return Task.FromResult(new ChatResult("No agent chat implementations are enabled. Please check the configuration.", issueNum));
+        return Task.FromResult(new ChatResult("No agent chat implementations are enabled. Please check the configuration.", issueNum, null));
     }
 }

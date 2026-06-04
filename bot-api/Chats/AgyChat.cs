@@ -37,17 +37,12 @@ public class AgyChat : IAgentChat
 
         // Embed the plan artifact content directly in the comment if available
         string planContent = TryReadPlanArtifact(newSessionId);
-        if (!string.IsNullOrEmpty(planContent))
-        {
-            _logger.LogInformation($"[Processor] Embedding plan artifact in comment for session '{newSessionId}'");
-            cleanResponse = $"{cleanResponse}\n\n---\n\n### 📋 Implementation Plan\n\n{planContent}";
-        }
-        else
+        if (string.IsNullOrEmpty(planContent))
         {
             _logger.LogWarning($"[Processor] No plan artifact found for session '{newSessionId}'");
         }
 
-        return new ChatResult(cleanResponse, newSessionId);
+        return new ChatResult(cleanResponse, newSessionId, planContent);
     }
 
     private string ExecuteAgyHeadless(string repoPath, string prompt, string? conversationId = null)

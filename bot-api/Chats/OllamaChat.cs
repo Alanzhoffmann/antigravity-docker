@@ -33,7 +33,7 @@ public class OllamaChat : IAgentChat
         if (!IsEnabled)
         {
             _logger.LogWarning($"[OllamaChat] OllamaChat is not enabled due to missing configuration. Model: '{Model}', Url: '{Url}'");
-            return new ChatResult("OllamaChat is not configured properly. Please check the logs for details.", issueNum);
+            return new ChatResult("OllamaChat is not configured properly. Please check the logs for details.", issueNum, null);
         }
 
         IChatClient chatClient = new OllamaApiClient(Url, Model);
@@ -65,6 +65,18 @@ public class OllamaChat : IAgentChat
         _logger.LogInformation($"[OllamaChat] Full response for issue #{issueNum}: '{response}'");
 
         chatHistory.Add(new ChatMessage(ChatRole.Assistant, response));
-        return new ChatResult(response, issueNum);
+        return new ChatResult(response, issueNum, await GetArtifactOutputAsync(repoPath, issueNum));
+    }
+
+    private async Task<string> GetArtifactOutputAsync(string repoPath, string sessionId)
+    {
+        var file = Directory.GetFiles(repoPath, "*plan*", SearchOption.AllDirectories).FirstOrDefault();
+        if (file == null)
+        {
+            _logger.LogWarning($"[OllamaChat] Plan artifact not found for session '{sessionId}'");
+            return string.Empty;
+        }
+
+        return await File.ReadAllTextAsync(file);
     }
 }

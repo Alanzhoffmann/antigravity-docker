@@ -1,6 +1,6 @@
 namespace bot_api.Models;
 
-public record ChatResult(string Response, string ConversationId)
+public record ChatResult(string Output, string ConversationId, string? ArtifactOutput)
 {
-    public static implicit operator string(ChatResult result) => result.Response;
+    public static implicit operator string(ChatResult result) => result.Output;
 }
