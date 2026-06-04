@@ -13,11 +13,18 @@ public class OllamaChat : IAgentChat
     private readonly ILogger<OllamaChat> _logger;
     private readonly IOptionsMonitor<OllamaOptions> _optionsMonitor;
     private readonly ArtifactParser _artifactParser;
+    private readonly IHttpClientFactory _httpClientFactory;
     private readonly Dictionary<string, List<ChatMessage>> _conversationHistories = new();
 
-    public OllamaChat(IOptionsMonitor<OllamaOptions> optionsMonitor, ArtifactParser artifactParser, ILogger<OllamaChat> logger)
+    public OllamaChat(
+        IOptionsMonitor<OllamaOptions> optionsMonitor,
+        IHttpClientFactory httpClientFactory,
+        ArtifactParser artifactParser,
+        ILogger<OllamaChat> logger
+    )
     {
         _optionsMonitor = optionsMonitor;
+        _httpClientFactory = httpClientFactory;
         _artifactParser = artifactParser;
         _logger = logger;
     }
@@ -38,7 +45,8 @@ public class OllamaChat : IAgentChat
             return new ChatResult("OllamaChat is not configured properly. Please check the logs for details.", issueNum, null);
         }
 
-        IChatClient chatClient = new OllamaApiClient(Url, Model);
+        var client = _httpClientFactory.CreateClient(nameof(OllamaChat));
+        using IChatClient chatClient = new OllamaApiClient(client, Model);
 
         // Start the conversation with context for the AI model
         if (!_conversationHistories.TryGetValue(issueNum, out var chatHistory))

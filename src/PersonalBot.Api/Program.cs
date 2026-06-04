@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Options;
 using PersonalBot.Api;
 using PersonalBot.Api.Chats;
 using PersonalBot.Api.Interfaces;
@@ -10,6 +11,16 @@ using PersonalBot.Api.Options;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.TryAddSingleton(TimeProvider.System);
+builder.Services.AddHttpClient(
+    nameof(OllamaChat),
+    (serviceProvider, client) =>
+    {
+        var options = serviceProvider.GetRequiredService<IOptionsMonitor<OllamaOptions>>().CurrentValue;
+        client.BaseAddress = options.Url ?? throw new InvalidOperationException("Ollama url is missing");
+        client.Timeout = Timeout.InfiniteTimeSpan;
+    }
+);
+
 builder.Services.AddSingleton<IAgentChat, OllamaChat>();
 builder.Services.AddSingleton<IAgentChat, AgyChat>();
 builder.Services.AddSingleton<IAgentChat, NullChat>();
