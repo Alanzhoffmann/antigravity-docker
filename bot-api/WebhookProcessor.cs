@@ -11,6 +11,7 @@ public class WebhookProcessor
 {
     private readonly ILogger<WebhookProcessor> _logger;
     private readonly IAgentChat _agentChat;
+    private const string BotWatermark = "<!-- from-bot: true -->";
 
     // Deduplicate in-flight issue processing tasks
     readonly ConcurrentDictionary<string, Task> inFlightIssues = new();
@@ -116,18 +117,17 @@ INSTRUCTIONS:
         // ─── ISSUE COMMENTS (FEEDBACK / APPROVAL) ────────────────────────────────
         if (eventType == "issue_comment" && action == "created")
         {
-            var userType = root.GetNestedStringSafe("comment", "user", "type");
-            if (userType == "Bot")
-            {
-                _logger.LogInformation($"[Processor] Skipping Bot comment to prevent loop");
-                return;
-            }
-
             var issueNum = root.GetNestedStringSafe("issue", "number");
             var commentBody = root.GetNestedStringSafe("comment", "body");
             if (string.IsNullOrEmpty(issueNum) || string.IsNullOrEmpty(commentBody))
             {
                 _logger.LogWarning($"[Processor] issue_comment missing issue.number or comment.body");
+                return;
+            }
+
+            if (IsOwnComment(commentBody))
+            {
+                _logger.LogInformation($"[Processor] Skipping Bot comment to prevent loop");
                 return;
             }
 
@@ -234,6 +234,8 @@ INSTRUCTIONS:
     {
         string payload = string.IsNullOrEmpty(sessionId) ? body : $"{body}\n\n<!-- agy-session-id: {sessionId} -->";
 
+        payload += $"\n\n{BotWatermark}";
+
         _logger.LogInformation($"[GitHub] Posting comment on issue #{issueNum} (session='{sessionId}', length={payload.Length})");
         ExecuteProcess("gh", repoPath, "issue", "comment", issueNum, "--body", payload);
     }
@@ -247,6 +249,8 @@ INSTRUCTIONS:
         _logger.LogInformation($"[GitHub] Session ID for issue #{issueNum}: '{(string.IsNullOrEmpty(sessionId) ? "none" : sessionId)}'");
         return sessionId;
     }
+
+    bool IsOwnComment(string commentBody) => commentBody.Contains(BotWatermark);
 
     string ExecuteProcess(string fileName, string workingDirectory, params string[] args)
     {
