@@ -46,7 +46,8 @@ public class OllamaChat : IAgentChat
         }
 
         var client = _httpClientFactory.CreateClient(nameof(OllamaChat));
-        using IChatClient chatClient = new OllamaApiClient(client, Model);
+        using IChatClient ollamaClient = new OllamaApiClient(client, Model);
+        var aiAgent = ollamaClient.AsAIAgent();
 
         // Start the conversation with context for the AI model
         if (!_conversationHistories.TryGetValue(issueNum, out var chatHistory))
@@ -68,7 +69,7 @@ public class OllamaChat : IAgentChat
         // Stream the AI response and add to chat history
         _logger.LogInformation($"[OllamaChat] Streaming response for issue #{issueNum}");
         var response = "";
-        await foreach (ChatResponseUpdate item in chatClient.GetStreamingResponseAsync(chatHistory))
+        await foreach (var item in aiAgent.RunStreamingAsync(chatHistory))
         {
             response += item.Text;
         }
