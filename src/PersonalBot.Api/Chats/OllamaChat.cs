@@ -45,7 +45,7 @@ public class OllamaChat : IAgentChat
     {
         if (!IsEnabled)
         {
-            _logger.LogWarning($"[OllamaChat] OllamaChat is not enabled due to missing configuration. Model: '{Model}', Url: '{Url}'");
+            _logger.LogWarning("OllamaChat is not enabled due to missing configuration. Model: '{Model}', Url: '{Url}'", Model, Url);
             return new ChatResult("OllamaChat is not configured properly. Please check the logs for details.", issueNum, null);
         }
 
@@ -66,18 +66,18 @@ public class OllamaChat : IAgentChat
         }
 
         // Get user prompt and add to chat history
-        _logger.LogInformation($"[OllamaChat] User prompt for issue #{issueNum}: '{prompt}'");
+        _logger.LogInformation("User prompt for issue #{issueNum}: '{prompt}'", issueNum, prompt);
         chatHistory.Add(new ChatMessage(ChatRole.User, prompt));
 
         // Stream the AI response and add to chat history
-        _logger.LogInformation($"[OllamaChat] Streaming response for issue #{issueNum}");
+        _logger.LogInformation("Streaming response for issue #{issueNum}", issueNum);
         var response = "";
         await foreach (var item in aiAgent.RunStreamingAsync(chatHistory))
         {
             response += item.Text;
         }
 
-        _logger.LogInformation($"[OllamaChat] Full response for issue #{issueNum}: '{response}'");
+        _logger.LogInformation("Full response for issue #{issueNum}: '{response}'", issueNum, response);
 
         chatHistory.Add(new ChatMessage(ChatRole.Assistant, response));
         return new ChatResult(response, issueNum, await _artifactParser.TryReadPlanArtifact(repoPath));
