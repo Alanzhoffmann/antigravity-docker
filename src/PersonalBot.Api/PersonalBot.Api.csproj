@@ -12,5 +12,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\PersonalBot.Workers\PersonalBot.Workers.csproj" />
+    <ProjectReference Include="..\PersonalBot.Tools\PersonalBot.Tools.csproj" />
   </ItemGroup>
 </Project>
