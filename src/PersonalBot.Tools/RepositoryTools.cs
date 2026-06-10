@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
+using PersonalBot.Utils;
 
 namespace PersonalBot.Tools;
 
@@ -9,11 +10,17 @@ public class RepositoryTools
 {
     private string _repoPath;
     private readonly ILogger<RepositoryTools> _logger;
+    private readonly ProcessUtils _processUtils;
 
-    public RepositoryTools(string repoPath, ILogger<RepositoryTools> logger)
+    public RepositoryTools(
+        string repoPath,
+        ILogger<RepositoryTools> logger,
+        ProcessUtils processUtils
+    )
     {
         _repoPath = repoPath;
         _logger = logger;
+        _processUtils = processUtils;
     }
 
     public IList<AITool> Tools =>
@@ -54,35 +61,16 @@ public class RepositoryTools
         [Description(
             "The git arguments, e.g., 'checkout -b fix-issue-1' or 'commit -am \"Fix bug\"'"
         )]
-            string gitArguments
+            string gitArguments,
+        CancellationToken cancellationToken = default
     )
     {
-        _logger.LogInformation(
-            "Running git command: 'git {GitArguments}' in '{RepoPath}'",
-            gitArguments,
-            _repoPath
+        return await _processUtils.RunProcessAsync(
+            "git",
+            [gitArguments],
+            _repoPath,
+            cancellationToken: cancellationToken
         );
-
-        var output = await Process.RunAndCaptureTextAsync(
-            new ProcessStartInfo
-            {
-                FileName = "git",
-                Arguments = gitArguments,
-                WorkingDirectory = _repoPath,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-            }
-        );
-
-        _logger.LogInformation(
-            "Git command completed with exit code {ExitCode}",
-            output.ExitStatus.ExitCode
-        );
-
-        return output.ExitStatus.ExitCode == 0
-            ? output.StandardOutput
-            : $"Git Error: {output.StandardError}";
     }
 
     [Description(
@@ -92,34 +80,15 @@ public class RepositoryTools
         [Description(
             "The gh arguments, e.g., 'issue list' or 'pr create --title \"New PR\" --body \"This is a new pull request.\"'"
         )]
-            string ghArguments
+            string ghArguments,
+        CancellationToken cancellationToken = default
     )
     {
-        _logger.LogInformation(
-            "Running gh command: 'gh {GhArguments}' in '{RepoPath}'",
-            ghArguments,
-            _repoPath
+        return await _processUtils.RunProcessAsync(
+            "gh",
+            [ghArguments],
+            _repoPath,
+            cancellationToken: cancellationToken
         );
-
-        var output = await Process.RunAndCaptureTextAsync(
-            new ProcessStartInfo
-            {
-                FileName = "gh",
-                Arguments = ghArguments,
-                WorkingDirectory = _repoPath,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-            }
-        );
-
-        _logger.LogInformation(
-            "Gh command completed with exit code {ExitCode}",
-            output.ExitStatus.ExitCode
-        );
-
-        return output.ExitStatus.ExitCode == 0
-            ? output.StandardOutput
-            : $"Gh Error: {output.StandardError}";
     }
 }

@@ -1,5 +1,3 @@
-using System.Collections.Concurrent;
-using System.Diagnostics;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Options;
@@ -7,6 +5,7 @@ using PersonalBot.Api.Interfaces;
 using PersonalBot.Api.Models;
 using PersonalBot.Api.Options;
 using PersonalBot.Tools;
+using PersonalBot.Utils;
 
 namespace PersonalBot.Api.Chats;
 
@@ -17,13 +16,21 @@ public class AgyChat : IAgentChat
     private readonly ArtifactParser _artifactParser;
     private readonly TimeProvider _timeProvider;
     private DateTimeOffset _lastExhaustedTokenTime = DateTime.MinValue;
+    private readonly ProcessUtils _processUtils;
 
-    public AgyChat(IOptionsMonitor<AgyOptions> optionsMonitor, ArtifactParser artifactParser, TimeProvider timeProvider, ILogger<AgyChat> logger)
+    public AgyChat(
+        IOptionsMonitor<AgyOptions> optionsMonitor,
+        ArtifactParser artifactParser,
+        TimeProvider timeProvider,
+        ILogger<AgyChat> logger,
+        ProcessUtils processUtils
+    )
     {
         _optionsMonitor = optionsMonitor;
         _artifactParser = artifactParser;
         _timeProvider = timeProvider;
         _logger = logger;
+        _processUtils = processUtils;
     }
 
     public bool IsEnabled => _optionsMonitor.CurrentValue.IsEnabled && (_lastExhaustedTokenTime - _timeProvider.GetUtcNow()).TotalSeconds > 600;
@@ -74,56 +81,20 @@ public class AgyChat : IAgentChat
             File.Delete(logFileName);
         }
 
-        _logger.LogInformation($"[AgyRunner] Starting agy session='{conversationId ?? "new"}' cwd='{repoPath}'");
-
-        using var process = new Process
-        {
-            StartInfo = new ProcessStartInfo
-            {
-                FileName = "agy",
-                WorkingDirectory = repoPath,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true,
-            },
-        };
-
+        var arguments = new List<string>();
         if (!string.IsNullOrEmpty(conversationId))
         {
-            process.StartInfo.ArgumentList.Add("--conversation");
-            process.StartInfo.ArgumentList.Add(conversationId);
+            arguments.Add($"--conversation {conversationId}");
         }
+        arguments.Add($"--prompt \"{prompt}\"");
+        arguments.Add($"--log-file {logFileName}");
 
-        process.StartInfo.ArgumentList.Add("-p");
-        process.StartInfo.ArgumentList.Add(prompt);
-
-        process.StartInfo.ArgumentList.Add("--log-file");
-        process.StartInfo.ArgumentList.Add(logFileName);
-
-        var sw = Stopwatch.StartNew();
-        process.Start();
-
-        string output = process.StandardOutput.ReadToEnd();
-        string error = process.StandardError.ReadToEnd();
-        process.WaitForExit();
-        sw.Stop();
-
-        _logger.LogInformation($"[AgyRunner] agy exited code={process.ExitCode} in {sw.Elapsed.TotalSeconds:F1}s");
-
-        if (!string.IsNullOrEmpty(error))
-            _logger.LogWarning($"[AgyRunner] stderr: {error.Trim()}");
+        var output = await _processUtils.RunProcessAsync("agy", arguments, repoPath, cancellationToken);
 
         string? logOutput = null;
         if (File.Exists(logFileName))
         {
             logOutput = await File.ReadAllTextAsync(logFileName, cancellationToken);
-        }
-
-        if (process.ExitCode != 0)
-        {
-            _logger.LogError($"[AgyRunner] agy failed: {error.Trim()}");
-            return ($"Error executing agent: {error}", logOutput);
         }
 
         return (output, logOutput);

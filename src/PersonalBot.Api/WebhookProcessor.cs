@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using PersonalBot.Api.Interfaces;
 using PersonalBot.Api.Models;
+using PersonalBot.Utils;
 
 namespace PersonalBot.Api;
 
@@ -11,21 +12,31 @@ public class WebhookProcessor
 {
     private readonly ILogger<WebhookProcessor> _logger;
     private readonly IAgentChat _agentChat;
+    private readonly ProcessUtils _processUtils;
     private const string BotWatermark = "<!-- from-bot: true -->";
 
     // Deduplicate in-flight issue processing tasks
     readonly ConcurrentDictionary<string, Task> inFlightIssues = new();
     readonly string workspaceBase = "/app/workspaces";
 
-    public WebhookProcessor(ILogger<WebhookProcessor> logger, IEnumerable<IAgentChat> agentChats)
+    public WebhookProcessor(ILogger<WebhookProcessor> logger, IEnumerable<IAgentChat> agentChats, ProcessUtils processUtils)
     {
         _logger = logger;
         _agentChat =
             agentChats.OrderBy(x => x.SortOrder).FirstOrDefault(x => x.IsEnabled)
             ?? throw new InvalidOperationException("No enabled IAgentChat implementations found");
+        _logger.LogInformation($"Using IAgentChat implementation: {_agentChat.GetType().Name}");
+
+        _processUtils = processUtils;
     }
 
-    public async Task ProcessWebhookAsync(string eventType, string deliveryId, string rawBody, string repoName)
+    public async ValueTask ProcessWebhookAsync(
+        string eventType,
+        string deliveryId,
+        string rawBody,
+        string repoName,
+        CancellationToken cancellationToken = default
+    )
     {
         _logger.LogInformation($"[Processor] Processing event='{eventType}' action delivery='{deliveryId}'");
         using var document = JsonDocument.Parse(rawBody);
@@ -47,7 +58,7 @@ public class WebhookProcessor
 
             // Each issue gets its own isolated clone so branches and commits never bleed across issues
             string localRepoPath = GetIssueRepoPath(repoName, issueNum);
-            EnsureRepo(localRepoPath, cloneUrl, repoName, issueNum);
+            await EnsureRepoAsync(localRepoPath, cloneUrl, repoName, issueNum);
 
             string issueKey = $"{repoName}#{issueNum}";
             if (inFlightIssues.ContainsKey(issueKey))
@@ -73,9 +84,14 @@ INSTRUCTIONS:
             _logger.LogInformation($"[Processor] Starting agent for issue #{issueNum}");
             var task = Task.Run(async () =>
             {
-                (string cleanResponse, string newSessionId, string? artifactOutput) = await _agentChat.GetResponseAsync(localRepoPath, issueNum, prompt);
+                (string cleanResponse, string newSessionId, string? artifactOutput) = await _agentChat.GetResponseAsync(
+                    localRepoPath,
+                    issueNum,
+                    prompt,
+                    cancellationToken
+                );
                 var comment = !string.IsNullOrEmpty(artifactOutput) ? artifactOutput : cleanResponse;
-                PostGitHubComment(localRepoPath, issueNum, comment, newSessionId);
+                await PostGitHubCommentAsync(localRepoPath, issueNum, comment, newSessionId, cancellationToken);
             });
             inFlightIssues[issueKey] = task;
             try
@@ -104,8 +120,8 @@ INSTRUCTIONS:
                     return;
                 }
                 string localRepoPath = GetIssueRepoPath(repoName, issueNum);
-                EnsureRepo(localRepoPath, cloneUrl, repoName, issueNum);
-                string sid = GetSessionIdFromIssue(localRepoPath, issueNum);
+                await EnsureRepoAsync(localRepoPath, cloneUrl, repoName, issueNum);
+                string sid = await GetSessionIdFromIssueAsync(localRepoPath, issueNum, cancellationToken);
                 if (!string.IsNullOrEmpty(sid))
                     await HandleApprovalAsync(localRepoPath, issueNum, sid);
                 else
@@ -132,9 +148,9 @@ INSTRUCTIONS:
             }
 
             string localRepoPath = GetIssueRepoPath(repoName, issueNum);
-            EnsureRepo(localRepoPath, cloneUrl, repoName, issueNum);
+            await EnsureRepoAsync(localRepoPath, cloneUrl, repoName, issueNum);
 
-            string activeSessionId = GetSessionIdFromIssue(localRepoPath, issueNum);
+            string activeSessionId = await GetSessionIdFromIssueAsync(localRepoPath, issueNum, cancellationToken);
             _logger.LogInformation($"[Processor] issue_comment #{issueNum} activeSession='{activeSessionId}'");
             if (string.IsNullOrEmpty(activeSessionId))
             {
@@ -156,9 +172,9 @@ INSTRUCTIONS:
                 string execPrompt =
                     $"Feedback received on Issue #{issueNum}: '{commentBody}'. Update the plan accordingly. Post an updated plan artifact and ask for another 👍 to proceed.";
                 _logger.LogInformation($"[Processor] Feedback on #{issueNum}: '{commentBody.Substring(0, Math.Min(80, commentBody.Length))}'");
-                var response = await _agentChat.GetResponseAsync(localRepoPath, issueNum, execPrompt);
+                var response = await _agentChat.GetResponseAsync(localRepoPath, issueNum, execPrompt, cancellationToken);
                 var comment = !string.IsNullOrEmpty(response.ArtifactOutput) ? response.ArtifactOutput : response.Output;
-                PostGitHubComment(localRepoPath, issueNum, comment, activeSessionId);
+                await PostGitHubCommentAsync(localRepoPath, issueNum, comment, activeSessionId, cancellationToken);
             }
             return;
         }
@@ -195,23 +211,23 @@ INSTRUCTIONS:
         }
 
         _logger.LogInformation($"[Processor] Unhandled event='{eventType}' action='{action}' — no-op");
-        await Task.CompletedTask;
+        await ValueTask.CompletedTask;
     }
 
     string GetIssueRepoPath(string repoName, string issueNum) => $"{workspaceBase}/{repoName}-issue-{issueNum}";
 
-    async Task HandleApprovalAsync(string localRepoPath, string issueNum, string sessionId)
+    async Task HandleApprovalAsync(string localRepoPath, string issueNum, string sessionId, CancellationToken cancellationToken = default)
     {
         _logger.LogInformation($"[Approval] Plan approved for issue #{issueNum} (session={sessionId}) — starting implementation");
         string prompt =
             $"The plan for Issue #{issueNum} has been approved. Create branch 'fix/issue-{issueNum}', implement the code changes, run any available local tests, and raise a PR via `gh pr create`. Commit only changes related to this issue.";
-        string response = await _agentChat.GetResponseAsync(localRepoPath, issueNum, prompt);
-        PostGitHubComment(localRepoPath, issueNum, response, sessionId);
+        string response = await _agentChat.GetResponseAsync(localRepoPath, issueNum, prompt, cancellationToken);
+        await PostGitHubCommentAsync(localRepoPath, issueNum, response, sessionId, cancellationToken);
         _logger.LogInformation($"[Approval] Implementation complete for issue #{issueNum}");
         await Task.CompletedTask;
     }
 
-    void EnsureRepo(string localRepoPath, string cloneUrl, string repoName, string issueNum)
+    async Task EnsureRepoAsync(string localRepoPath, string cloneUrl, string repoName, string issueNum, CancellationToken cancellationToken = default)
     {
         if (!Directory.Exists(localRepoPath))
         {
@@ -221,29 +237,29 @@ INSTRUCTIONS:
                 return;
             }
             _logger.LogInformation($"[RepoManager] Cloning '{cloneUrl}' -> '{localRepoPath}'");
-            ExecuteProcess("git", workspaceBase, "clone", cloneUrl, localRepoPath);
+            await _processUtils.RunProcessAsync("git", ["clone", cloneUrl, localRepoPath], workspaceBase, cancellationToken);
         }
         else
         {
             _logger.LogInformation($"[RepoManager] Pulling latest in '{localRepoPath}'");
-            ExecuteProcess("git", localRepoPath, "pull");
+            await _processUtils.RunProcessAsync("git", ["pull"], localRepoPath, cancellationToken);
         }
     }
 
-    void PostGitHubComment(string repoPath, string issueNum, string body, string sessionId)
+    async Task PostGitHubCommentAsync(string repoPath, string issueNum, string body, string sessionId, CancellationToken cancellationToken = default)
     {
         string payload = string.IsNullOrEmpty(sessionId) ? body : $"{body}\n\n<!-- agy-session-id: {sessionId} -->";
 
         payload += $"\n\n{BotWatermark}";
 
         _logger.LogInformation($"[GitHub] Posting comment on issue #{issueNum} (session='{sessionId}', length={payload.Length})");
-        ExecuteProcess("gh", repoPath, "issue", "comment", issueNum, "--body", payload);
+        await _processUtils.RunProcessAsync("gh", ["issue", "comment", issueNum, "--body", payload], repoPath, cancellationToken);
     }
 
-    string GetSessionIdFromIssue(string repoPath, string issueNum)
+    async Task<string> GetSessionIdFromIssueAsync(string repoPath, string issueNum, CancellationToken cancellationToken = default)
     {
         _logger.LogInformation($"[GitHub] Fetching session ID from issue #{issueNum}");
-        string commentsJson = ExecuteProcess("gh", repoPath, "issue", "view", issueNum, "--json", "comments");
+        string commentsJson = await _processUtils.RunProcessAsync("gh", ["issue", "view", issueNum, "--json", "comments"], repoPath, cancellationToken);
         var match = Regex.Match(commentsJson, @"<!-- agy-session-id: ([a-zA-Z0-9\-]+) -->", RegexOptions.RightToLeft);
         string sessionId = match.Success ? match.Groups[1].Value : string.Empty;
         _logger.LogInformation($"[GitHub] Session ID for issue #{issueNum}: '{(string.IsNullOrEmpty(sessionId) ? "none" : sessionId)}'");
@@ -251,38 +267,4 @@ INSTRUCTIONS:
     }
 
     bool IsOwnComment(string commentBody) => commentBody.Contains(BotWatermark);
-
-    string ExecuteProcess(string fileName, string workingDirectory, params string[] args)
-    {
-        _logger.LogInformation($"[Process] Executing: {fileName} {string.Join(" ", args)} (cwd='{workingDirectory}')");
-
-        using var process = new Process
-        {
-            StartInfo = new ProcessStartInfo
-            {
-                FileName = fileName,
-                WorkingDirectory = workingDirectory,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true,
-            },
-        };
-
-        foreach (var arg in args)
-            process.StartInfo.ArgumentList.Add(arg);
-
-        var sw = Stopwatch.StartNew();
-        process.Start();
-        string output = process.StandardOutput.ReadToEnd();
-        string errOut = process.StandardError.ReadToEnd();
-        process.WaitForExit();
-        sw.Stop();
-
-        _logger.LogInformation($"[Process] {fileName} exited code={process.ExitCode} in {sw.Elapsed.TotalMilliseconds:F0}ms");
-        if (!string.IsNullOrEmpty(errOut))
-            _logger.LogWarning($"[Process] {fileName} stderr: {errOut.Trim()}");
-
-        return output;
-    }
 }

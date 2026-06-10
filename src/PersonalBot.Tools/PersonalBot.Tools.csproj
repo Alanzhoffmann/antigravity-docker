@@ -20,4 +20,8 @@
       PrivateAssets="all"
     />
   </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PersonalBot.Utils\PersonalBot.Utils.csproj" />
+  </ItemGroup>
 </Project>

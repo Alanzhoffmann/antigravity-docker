@@ -1,16 +1,20 @@
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace PersonalBot.Tools.Factories;
 
 public class RoslynAgentToolsFactory
 {
+    private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<RoslynAgentToolsFactory> _logger;
-    private readonly ILoggerFactory _loggerFactory;
 
-    public RoslynAgentToolsFactory(ILoggerFactory loggerFactory)
+    public RoslynAgentToolsFactory(
+        IServiceProvider serviceProvider,
+        ILogger<RoslynAgentToolsFactory> logger
+    )
     {
-        _logger = loggerFactory.CreateLogger<RoslynAgentToolsFactory>();
-        _loggerFactory = loggerFactory;
+        _serviceProvider = serviceProvider;
+        _logger = logger;
     }
 
     public async Task<RoslynAgentTools> CreateAsync(string repoPath)
@@ -38,8 +42,7 @@ public class RoslynAgentToolsFactory
         var solutionOrProjectFile = solutionFiles.FirstOrDefault() ?? projectFiles.First();
         _logger.LogInformation("Found solution/project file: {FilePath}", solutionOrProjectFile);
 
-        var logger = _loggerFactory.CreateLogger<RoslynAgentTools>();
-        var tools = new RoslynAgentTools(logger);
+        var tools = ActivatorUtilities.CreateInstance<RoslynAgentTools>(_serviceProvider);
 
         if (solutionFiles.Length > 0)
         {

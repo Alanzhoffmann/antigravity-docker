@@ -8,6 +8,7 @@ using PersonalBot.Api.Chats;
 using PersonalBot.Api.Interfaces;
 using PersonalBot.Api.Options;
 using PersonalBot.Tools;
+using PersonalBot.Utils;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -27,6 +28,7 @@ builder.Services.AddSingleton<IAgentChat, AgyChat>();
 builder.Services.AddSingleton<IAgentChat, NullChat>();
 builder.Services.AddScoped<WebhookProcessor>();
 builder.Services.AddPersonalBotTools();
+builder.Services.AddUtils();
 
 builder.Services.AddOptions<OllamaOptions>().BindConfiguration(OllamaOptions.SectionName);
 builder.Services.AddOptions<AgyOptions>().BindConfiguration(AgyOptions.SectionName);
