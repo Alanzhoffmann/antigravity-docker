@@ -55,7 +55,7 @@ public class OllamaChat : IAgentChat
 
         var repositoryTools = await _repositoryToolsFactory.CreateAsync(repoPath);
         using var roslynAgentTools = await _roslynAgentToolsFactory.CreateAsync(repoPath);
-        
+
         var client = _httpClientFactory.CreateClient(nameof(OllamaChat));
         using IChatClient ollamaClient = new OllamaApiClient(client, Model);
         var aiAgent = ollamaClient.AsAIAgent(

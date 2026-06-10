@@ -84,4 +84,42 @@ public class RepositoryTools
             ? output.StandardOutput
             : $"Git Error: {output.StandardError}";
     }
+
+    [Description(
+        "Executes a gh command in the repository workspace. Use this to interact with GitHub issues, PRs, etc."
+    )]
+    public async Task<string> RunGhCommand(
+        [Description(
+            "The gh arguments, e.g., 'issue list' or 'pr create --title \"New PR\" --body \"This is a new pull request.\"'"
+        )]
+            string ghArguments
+    )
+    {
+        _logger.LogInformation(
+            "Running gh command: 'gh {GhArguments}' in '{RepoPath}'",
+            ghArguments,
+            _repoPath
+        );
+
+        var output = await Process.RunAndCaptureTextAsync(
+            new ProcessStartInfo
+            {
+                FileName = "gh",
+                Arguments = ghArguments,
+                WorkingDirectory = _repoPath,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+            }
+        );
+
+        _logger.LogInformation(
+            "Gh command completed with exit code {ExitCode}",
+            output.ExitStatus.ExitCode
+        );
+
+        return output.ExitStatus.ExitCode == 0
+            ? output.StandardOutput
+            : $"Gh Error: {output.StandardError}";
+    }
 }
