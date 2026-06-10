@@ -6,6 +6,7 @@ using Microsoft.Extensions.Options;
 using PersonalBot.Api.Interfaces;
 using PersonalBot.Api.Models;
 using PersonalBot.Api.Options;
+using PersonalBot.Tools;
 
 namespace PersonalBot.Api.Chats;
 

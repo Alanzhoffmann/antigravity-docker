@@ -1,4 +1,6 @@
-namespace PersonalBot.Api;
+using Microsoft.Extensions.Logging;
+
+namespace PersonalBot.Tools;
 
 public class ArtifactParser
 {

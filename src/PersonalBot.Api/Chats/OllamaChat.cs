@@ -6,6 +6,7 @@ using PersonalBot.Api.Interfaces;
 using PersonalBot.Api.Models;
 using PersonalBot.Api.Options;
 using PersonalBot.Tools;
+using PersonalBot.Tools.Factories;
 
 namespace PersonalBot.Api.Chats;
 
@@ -16,13 +17,13 @@ public class OllamaChat : IAgentChat
     private readonly ArtifactParser _artifactParser;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly Dictionary<string, List<ChatMessage>> _conversationHistories = new();
-    private readonly RepositoryTools _repositoryTools;
+    private readonly RepositoryToolsFactory _repositoryToolsFactory;
 
     public OllamaChat(
         IOptionsMonitor<OllamaOptions> optionsMonitor,
         IHttpClientFactory httpClientFactory,
         ArtifactParser artifactParser,
-        RepositoryTools repositoryTools,
+        RepositoryToolsFactory repositoryToolsFactory,
         ILogger<OllamaChat> logger
     )
     {
@@ -30,7 +31,7 @@ public class OllamaChat : IAgentChat
         _httpClientFactory = httpClientFactory;
         _artifactParser = artifactParser;
         _logger = logger;
-        _repositoryTools = repositoryTools;
+        _repositoryToolsFactory = repositoryToolsFactory;
     }
 
     private string? Model => _optionsMonitor.CurrentValue.Model;
@@ -49,13 +50,13 @@ public class OllamaChat : IAgentChat
             return new ChatResult("OllamaChat is not configured properly. Please check the logs for details.", issueNum, null);
         }
 
-        _repositoryTools.SetRepoPath(repoPath);
+        var repositoryTools = await _repositoryToolsFactory.CreateAsync(repoPath);
 
         var client = _httpClientFactory.CreateClient(nameof(OllamaChat));
         using IChatClient ollamaClient = new OllamaApiClient(client, Model);
         var aiAgent = ollamaClient.AsAIAgent(
             instructions: "You are an assistant for a developer working on a GitHub issue. Provide helpful responses to their prompts based on the context of the issue and the repository.",
-            tools: [.. _repositoryTools.Tools]
+            tools: [.. repositoryTools.Tools]
         );
 
         // Start the conversation with context for the AI model

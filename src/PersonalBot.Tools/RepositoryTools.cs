@@ -10,9 +10,9 @@ public class RepositoryTools
     private string _repoPath;
     private readonly ILogger<RepositoryTools> _logger;
 
-    public RepositoryTools(ILogger<RepositoryTools> logger)
+    public RepositoryTools(string repoPath, ILogger<RepositoryTools> logger)
     {
-        _repoPath = string.Empty;
+        _repoPath = repoPath;
         _logger = logger;
     }
 
@@ -23,16 +23,6 @@ public class RepositoryTools
             AIFunctionFactory.Create(ReadFile),
             AIFunctionFactory.Create(WriteFile),
         };
-
-    public void SetRepoPath(string repoPath)
-    {
-        _logger.LogInformation(
-            "Updating RepositoryTools repo path from '{OldPath}' to '{NewPath}'",
-            _repoPath,
-            repoPath
-        );
-        _repoPath = repoPath;
-    }
 
     [Description("Reads the contents of a specific file in the repository.")]
     public async Task<string> ReadFile(
