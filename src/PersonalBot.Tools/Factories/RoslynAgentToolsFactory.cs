@@ -21,7 +21,7 @@ public class RoslynAgentToolsFactory
         );
 
         // find solution or project file in repo path
-        var solutionFiles = Directory.GetFiles(repoPath, "*.sln", SearchOption.AllDirectories);
+        var solutionFiles = Directory.GetFiles(repoPath, "*.slnx", SearchOption.AllDirectories);
         var projectFiles = Directory.GetFiles(repoPath, "*.csproj", SearchOption.AllDirectories);
         if (solutionFiles.Length == 0 && projectFiles.Length == 0)
         {
@@ -30,7 +30,7 @@ public class RoslynAgentToolsFactory
                 repoPath
             );
             throw new FileNotFoundException(
-                "No solution (.sln) or project (.csproj) file found in repository path.",
+                "No solution (.slnx) or project (.csproj) file found in repository path.",
                 repoPath
             );
         }

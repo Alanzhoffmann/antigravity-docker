@@ -26,8 +26,7 @@ builder.Services.AddSingleton<IAgentChat, OllamaChat>();
 builder.Services.AddSingleton<IAgentChat, AgyChat>();
 builder.Services.AddSingleton<IAgentChat, NullChat>();
 builder.Services.AddScoped<WebhookProcessor>();
-builder.Services.AddTransient<ArtifactParser>();
-builder.Services.AddScoped<RepositoryTools>();
+builder.Services.AddPersonalBotTools();
 
 builder.Services.AddOptions<OllamaOptions>().BindConfiguration(OllamaOptions.SectionName);
 builder.Services.AddOptions<AgyOptions>().BindConfiguration(AgyOptions.SectionName);
