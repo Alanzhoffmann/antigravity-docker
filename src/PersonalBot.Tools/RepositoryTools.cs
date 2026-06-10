@@ -29,7 +29,6 @@ public class RepositoryTools
             AIFunctionFactory.Create(RunBashCommand),
             AIFunctionFactory.Create(ReadFile),
             AIFunctionFactory.Create(WriteFile),
-            AIFunctionFactory.Create(RunGhCommand),
         };
 
     [Description("Reads the contents of a specific file in the repository.")]
@@ -76,24 +75,5 @@ public class RepositoryTools
         return string.IsNullOrWhiteSpace(response)
             ? "Command executed successfully (no output)."
             : response;
-    }
-
-    [Description(
-        "Executes a gh command in the repository workspace. Use this to interact with GitHub issues, PRs, etc."
-    )]
-    public async Task<string> RunGhCommand(
-        [Description(
-            "The gh arguments, e.g., 'issue list' or 'pr create --title \"New PR\" --body \"This is a new pull request.\"'"
-        )]
-            string ghArguments,
-        CancellationToken cancellationToken = default
-    )
-    {
-        return await _processUtils.RunProcessAsync(
-            "gh",
-            [ghArguments],
-            _repoPath,
-            cancellationToken: cancellationToken
-        );
     }
 }
