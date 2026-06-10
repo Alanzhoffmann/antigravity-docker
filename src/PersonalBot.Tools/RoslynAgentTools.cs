@@ -2,6 +2,7 @@ using System.ComponentModel;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Formatting;
 using Microsoft.CodeAnalysis.MSBuild;
+using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 
 public class RoslynAgentTools : IDisposable
@@ -35,6 +36,15 @@ public class RoslynAgentTools : IDisposable
         private set => _currentSolution = value;
     }
 
+    public IList<AITool> Tools =>
+        new List<AITool>
+        {
+            AIFunctionFactory.Create(FindReferences),
+            AIFunctionFactory.Create(ReadMethodCode),
+            AIFunctionFactory.Create(ReplaceMethodCode),
+            AIFunctionFactory.Create(ListProjects),
+        };
+
     internal async Task LoadSolutionAsync(string solutionPath)
     {
         CurrentSolution = await _workspace.OpenSolutionAsync(solutionPath);
@@ -44,6 +54,13 @@ public class RoslynAgentTools : IDisposable
     {
         var project = await _workspace.OpenProjectAsync(projectPath);
         CurrentSolution = project.Solution;
+    }
+
+    [Description("Lists all projects in the solution.")]
+    public Task<string> ListProjects()
+    {
+        var projectNames = CurrentSolution.Projects.Select(p => p.Name);
+        return Task.FromResult(string.Join("\n", projectNames));
     }
 
     [Description(

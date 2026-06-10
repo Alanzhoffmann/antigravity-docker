@@ -18,12 +18,14 @@ public class OllamaChat : IAgentChat
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly Dictionary<string, List<ChatMessage>> _conversationHistories = new();
     private readonly RepositoryToolsFactory _repositoryToolsFactory;
+    private readonly RoslynAgentToolsFactory _roslynAgentToolsFactory;
 
     public OllamaChat(
         IOptionsMonitor<OllamaOptions> optionsMonitor,
         IHttpClientFactory httpClientFactory,
         ArtifactParser artifactParser,
         RepositoryToolsFactory repositoryToolsFactory,
+        RoslynAgentToolsFactory roslynAgentToolsFactory,
         ILogger<OllamaChat> logger
     )
     {
@@ -32,6 +34,7 @@ public class OllamaChat : IAgentChat
         _artifactParser = artifactParser;
         _logger = logger;
         _repositoryToolsFactory = repositoryToolsFactory;
+        _roslynAgentToolsFactory = roslynAgentToolsFactory;
     }
 
     private string? Model => _optionsMonitor.CurrentValue.Model;
@@ -51,12 +54,13 @@ public class OllamaChat : IAgentChat
         }
 
         var repositoryTools = await _repositoryToolsFactory.CreateAsync(repoPath);
-
+        using var roslynAgentTools = await _roslynAgentToolsFactory.CreateAsync(repoPath);
+        
         var client = _httpClientFactory.CreateClient(nameof(OllamaChat));
         using IChatClient ollamaClient = new OllamaApiClient(client, Model);
         var aiAgent = ollamaClient.AsAIAgent(
             instructions: "You are an assistant for a developer working on a GitHub issue. Provide helpful responses to their prompts based on the context of the issue and the repository.",
-            tools: [.. repositoryTools.Tools]
+            tools: [.. repositoryTools.Tools, .. roslynAgentTools.Tools]
         );
 
         // Start the conversation with context for the AI model
