@@ -8,12 +8,14 @@ public static class GithubHookEndpoint
     public static void MapGithubHookEndpoint(this WebApplication app)
     {
         HashSet<string> supportedRepos = new HashSet<string> { "antigravity-docker" };
+        var logger = app.Logger;
+
         // ─── WEBHOOK ENDPOINT ───────────────────────────────────────────────────────
         // Returns 202 immediately so GitHub never times out; real work runs in background.
 
         app.MapPost(
             "/github-webhook",
-            async (WebhookProcessor webhookProcessor, HttpContext context, ILogger logger) =>
+            async (WebhookProcessor webhookProcessor, HttpContext context) =>
             {
                 var eventType = context.Request.Headers["X-GitHub-Event"].ToString();
                 var deliveryId = context.Request.Headers["X-GitHub-Delivery"].ToString();
