@@ -18,19 +18,19 @@ public class QueueProcessor : BackgroundService
         while (!stoppingToken.IsCancellationRequested)
         {
             var scope = _serviceScopeFactory.CreateScope();
-            var taskQueryService = scope.ServiceProvider.GetRequiredService<ITaskQueryService>();
+            var taskService = scope.ServiceProvider.GetRequiredService<ITaskService>();
 
-            await ProcessTasksAsync(taskQueryService, stoppingToken);
+            await ProcessTasksAsync(taskService, stoppingToken);
             await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
         }
     }
 
     private async Task ProcessTasksAsync(
-        ITaskQueryService taskQueryService,
+        ITaskService taskService,
         CancellationToken cancellationToken
     )
     {
-        var nextTask = await taskQueryService.GetNextPendingTaskAsync(cancellationToken);
+        var nextTask = await taskService.GetNextPendingTaskAsync(cancellationToken);
         if (nextTask is not null)
         {
             // Process the task here

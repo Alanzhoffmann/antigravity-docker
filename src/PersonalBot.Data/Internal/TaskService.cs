@@ -4,12 +4,12 @@ using PersonalBot.Data.Models;
 
 namespace PersonalBot.Data.Internal;
 
-public class TaskQueryService : ITaskQueryService
+public class TaskService : ITaskService
 {
     private readonly BotDbContext _dbContext;
     private readonly MigrationState<BotDbContext> _migrationState;
 
-    public TaskQueryService(BotDbContext dbContext, MigrationState<BotDbContext> migrationState)
+    public TaskService(BotDbContext dbContext, MigrationState<BotDbContext> migrationState)
     {
         _dbContext = dbContext;
         _migrationState = migrationState;
@@ -29,4 +29,9 @@ public class TaskQueryService : ITaskQueryService
             .OrderBy(t => t.CreatedAt)
             .FirstOrDefaultAsync(cancellationToken);
     }
+
+    public void AddNewTask(AiTask aiTask) => _dbContext.Add(aiTask);
+
+    public async Task CommitAsync(CancellationToken cancellationToken = default) =>
+        await _dbContext.SaveChangesAsync(cancellationToken);
 }
