@@ -26,9 +26,10 @@ public class RepositoryTools
     public IList<AITool> Tools =>
         new List<AITool>
         {
-            AIFunctionFactory.Create(RunGitCommand),
+            AIFunctionFactory.Create(RunBashCommand),
             AIFunctionFactory.Create(ReadFile),
             AIFunctionFactory.Create(WriteFile),
+            AIFunctionFactory.Create(RunGhCommand),
         };
 
     [Description("Reads the contents of a specific file in the repository.")]
@@ -55,22 +56,26 @@ public class RepositoryTools
     }
 
     [Description(
-        "Executes a Git command in the repository workspace. Use this to create branches, commit, and push."
+        "Executes a raw bash command in the repository workspace. Supports pipes (|), redirects (>), and standard Linux utilities like ls, grep, find, and git."
     )]
-    public async Task<string> RunGitCommand(
+    public async Task<string> RunBashCommand(
         [Description(
-            "The git arguments, e.g., 'checkout -b fix-issue-1' or 'commit -am \"Fix bug\"'"
+            "The full bash command to execute, e.g., 'ls -la' or 'git log --oneline | grep fix'"
         )]
-            string gitArguments,
+            string command,
         CancellationToken cancellationToken = default
     )
     {
-        return await _processUtils.RunProcessAsync(
-            "git",
-            [gitArguments],
+        var response = await _processUtils.RunProcessAsync(
+            "/bin/bash",
+            ["-c", command],
             _repoPath,
             cancellationToken: cancellationToken
         );
+
+        return string.IsNullOrWhiteSpace(response)
+            ? "Command executed successfully (no output)."
+            : response;
     }
 
     [Description(

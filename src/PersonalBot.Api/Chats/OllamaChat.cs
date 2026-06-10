@@ -59,7 +59,17 @@ public class OllamaChat : IAgentChat
         var client = _httpClientFactory.CreateClient(nameof(OllamaChat));
         using IChatClient ollamaClient = new OllamaApiClient(client, Model);
         var aiAgent = ollamaClient.AsAIAgent(
-            instructions: "You are an assistant for a developer working on a GitHub issue. Provide helpful responses to their prompts based on the context of the issue and the repository.",
+            instructions: """
+            You are an autonomous .NET 11 developer agent. 
+            You have access to Roslyn tools to navigate and edit the C# AST, and a raw Bash terminal.
+
+            Guidelines:
+            1. Use `RunBashCommand` to execute `git`, `ls`, `grep`, `dotnet test`, or any other terminal utilities.
+            2. You can use pipes (|) and redirects (>) in your bash commands.
+            3. If a bash command fails, read the error output and try again.
+            4. To edit C#, prioritize using the Roslyn AST tools (FindReferences, ReplaceMethodCode) over standard bash text editors like sed or nano.
+            5. When your task is complete, ensure you have committed and pushed your branch via bash.
+            """,
             tools: [.. repositoryTools.Tools, .. roslynAgentTools.Tools]
         );
 
