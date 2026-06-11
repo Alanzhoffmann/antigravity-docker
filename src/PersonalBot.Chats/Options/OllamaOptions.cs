@@ -1,6 +1,6 @@
-namespace PersonalBot.Api.Options;
+namespace PersonalBot.Chats.Options;
 
-public class OllamaOptions
+internal class OllamaOptions
 {
     public const string SectionName = "Ollama";
 

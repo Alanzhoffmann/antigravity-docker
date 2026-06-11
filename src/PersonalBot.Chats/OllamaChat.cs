@@ -1,16 +1,17 @@
 using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using OllamaSharp;
-using PersonalBot.Api.Interfaces;
-using PersonalBot.Api.Models;
-using PersonalBot.Api.Options;
+using PersonalBot.Chats.Interfaces;
+using PersonalBot.Chats.Models;
+using PersonalBot.Chats.Options;
 using PersonalBot.Tools;
 using PersonalBot.Tools.Factories;
 
-namespace PersonalBot.Api.Chats;
+namespace PersonalBot.Chats;
 
-public class OllamaChat : IAgentChat
+internal class OllamaChat : IAgentChat
 {
     private readonly ILogger<OllamaChat> _logger;
     private readonly IOptionsMonitor<OllamaOptions> _optionsMonitor;
@@ -45,12 +46,25 @@ public class OllamaChat : IAgentChat
 
     public int SortOrder => 1;
 
-    public async Task<ChatResult> GetResponseAsync(string repoPath, string issueNum, string prompt, CancellationToken cancellationToken = default)
+    public async Task<ChatResult> GetResponseAsync(
+        string repoPath,
+        string issueNum,
+        string prompt,
+        CancellationToken cancellationToken = default
+    )
     {
         if (!IsEnabled)
         {
-            _logger.LogWarning("OllamaChat is not enabled due to missing configuration. Model: '{Model}', Url: '{Url}'", Model, Url);
-            return new ChatResult("OllamaChat is not configured properly. Please check the logs for details.", issueNum, null);
+            _logger.LogWarning(
+                "OllamaChat is not enabled due to missing configuration. Model: '{Model}', Url: '{Url}'",
+                Model,
+                Url
+            );
+            return new ChatResult(
+                "OllamaChat is not configured properly. Please check the logs for details.",
+                issueNum,
+                null
+            );
         }
 
         var repositoryTools = await _repositoryToolsFactory.CreateAsync(repoPath);
@@ -92,9 +106,17 @@ public class OllamaChat : IAgentChat
             response += item.Text;
         }
 
-        _logger.LogInformation("Full response for issue #{issueNum}: '{response}'", issueNum, response);
+        _logger.LogInformation(
+            "Full response for issue #{issueNum}: '{response}'",
+            issueNum,
+            response
+        );
 
         chatHistory.Add(new ChatMessage(ChatRole.Assistant, response));
-        return new ChatResult(response, issueNum, await _artifactParser.TryReadPlanArtifact(repoPath));
+        return new ChatResult(
+            response,
+            issueNum,
+            await _artifactParser.TryReadPlanArtifact(repoPath)
+        );
     }
 }

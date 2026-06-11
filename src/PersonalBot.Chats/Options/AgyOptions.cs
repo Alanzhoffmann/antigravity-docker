@@ -1,6 +1,6 @@
-namespace PersonalBot.Api.Options;
+namespace PersonalBot.Chats.Options;
 
-public class AgyOptions
+internal class AgyOptions
 {
     public const string SectionName = "Agy";
 

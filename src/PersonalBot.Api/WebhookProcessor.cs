@@ -1,9 +1,7 @@
 using System.Collections.Concurrent;
-using System.Diagnostics;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using PersonalBot.Api.Interfaces;
-using PersonalBot.Api.Models;
+using PersonalBot.Chats.Interfaces;
 using PersonalBot.Utils;
 
 namespace PersonalBot.Api;
@@ -19,13 +17,10 @@ public class WebhookProcessor
     readonly ConcurrentDictionary<string, Task> inFlightIssues = new();
     readonly string workspaceBase = "/app/workspaces";
 
-    public WebhookProcessor(ILogger<WebhookProcessor> logger, IEnumerable<IAgentChat> agentChats, ProcessUtils processUtils)
+    public WebhookProcessor(ILogger<WebhookProcessor> logger, IChatResolver chatResolver, ProcessUtils processUtils)
     {
         _logger = logger;
-        _agentChat =
-            agentChats.OrderBy(x => x.SortOrder).FirstOrDefault(x => x.IsEnabled)
-            ?? throw new InvalidOperationException("No enabled IAgentChat implementations found");
-        _logger.LogInformation($"Using IAgentChat implementation: {_agentChat.GetType().Name}");
+        _agentChat = chatResolver.ResolveCurrent();
 
         _processUtils = processUtils;
     }

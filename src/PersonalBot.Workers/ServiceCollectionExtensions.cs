@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using PersonalBot.Chats;
 using PersonalBot.Data;
 
 namespace PersonalBot.Workers;
@@ -9,6 +10,8 @@ public static class ServiceCollectionExtensions
     {
         services.AddDatabase();
         services.AddHostedService<QueueProcessor>();
+
+        services.AddChats();
 
         return services;
     }

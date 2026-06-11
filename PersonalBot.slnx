@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/PersonalBot.Api/PersonalBot.Api.csproj" />
+    <Project Path="src/PersonalBot.Chats/PersonalBot.Chats.csproj" />
     <Project Path="src/PersonalBot.Data/PersonalBot.Data.csproj" />
     <Project Path="src/PersonalBot.Tools/PersonalBot.Tools.csproj" />
     <Project Path="src/PersonalBot.Utils/PersonalBot.Utils.csproj" />

@@ -1,15 +1,16 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using PersonalBot.Api.Interfaces;
-using PersonalBot.Api.Models;
-using PersonalBot.Api.Options;
+using PersonalBot.Chats.Interfaces;
+using PersonalBot.Chats.Models;
+using PersonalBot.Chats.Options;
 using PersonalBot.Tools;
 using PersonalBot.Utils;
 
-namespace PersonalBot.Api.Chats;
+namespace PersonalBot.Chats;
 
-public class AgyChat : IAgentChat
+internal class AgyChat : IAgentChat
 {
     private readonly ILogger<AgyChat> _logger;
     private readonly IOptionsMonitor<AgyOptions> _optionsMonitor;
@@ -33,15 +34,23 @@ public class AgyChat : IAgentChat
         _processUtils = processUtils;
     }
 
-    public bool IsEnabled => _optionsMonitor.CurrentValue.IsEnabled && (_lastExhaustedTokenTime - _timeProvider.GetUtcNow()).TotalSeconds > 600;
+    public bool IsEnabled =>
+        _optionsMonitor.CurrentValue.IsEnabled
+        && (_lastExhaustedTokenTime - _timeProvider.GetUtcNow()).TotalSeconds > 600;
 
-    public async Task<ChatResult> GetResponseAsync(string repoPath, string issueNum, string prompt, CancellationToken cancellationToken = default)
+    public async Task<ChatResult> GetResponseAsync(
+        string repoPath,
+        string issueNum,
+        string prompt,
+        CancellationToken cancellationToken = default
+    )
     {
         (string agentOutput, string? log) = await ExecuteAgyHeadless(repoPath, prompt);
 
         if (string.IsNullOrEmpty(agentOutput))
         {
-            var hasExhaustedError = log?.Contains("RESOURCE_EXHAUSTED (code 429): Individual quota reached") ?? false;
+            var hasExhaustedError =
+                log?.Contains("RESOURCE_EXHAUSTED (code 429): Individual quota reached") ?? false;
             if (hasExhaustedError)
             {
                 _lastExhaustedTokenTime = _timeProvider.GetUtcNow();
@@ -89,7 +98,12 @@ public class AgyChat : IAgentChat
         arguments.Add($"--prompt \"{prompt}\"");
         arguments.Add($"--log-file {logFileName}");
 
-        var output = await _processUtils.RunProcessAsync("agy", arguments, repoPath, cancellationToken);
+        var output = await _processUtils.RunProcessAsync(
+            "agy",
+            arguments,
+            repoPath,
+            cancellationToken
+        );
 
         string? logOutput = null;
         if (File.Exists(logFileName))
@@ -102,9 +116,14 @@ public class AgyChat : IAgentChat
 
     string ExtractConversationId(string agyOutput)
     {
-        var match = Regex.Match(agyOutput, @"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}");
+        var match = Regex.Match(
+            agyOutput,
+            @"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+        );
         string id = match.Success ? match.Value : string.Empty;
-        _logger.LogInformation($"[AgyRunner] Extracted conversation ID: '{(string.IsNullOrEmpty(id) ? "none found" : id)}'");
+        _logger.LogInformation(
+            $"[AgyRunner] Extracted conversation ID: '{(string.IsNullOrEmpty(id) ? "none found" : id)}'"
+        );
         return id;
     }
 
@@ -113,7 +132,8 @@ public class AgyChat : IAgentChat
         if (string.IsNullOrEmpty(sessionId))
             return string.Empty;
 
-        var transcriptPath = $"/root/.gemini/antigravity-cli/brain/{sessionId}/.system_generated/logs/transcript.jsonl";
+        var transcriptPath =
+            $"/root/.gemini/antigravity-cli/brain/{sessionId}/.system_generated/logs/transcript.jsonl";
         _logger.LogInformation($"[Transcript] Reading transcript for session '{sessionId}'");
 
         if (!File.Exists(transcriptPath))
@@ -136,9 +156,15 @@ public class AgyChat : IAgentChat
                 {
                     using var doc = JsonDocument.Parse(line);
                     var root = doc.RootElement;
-                    if (root.TryGetProperty("type", out var typeProp) && typeProp.GetString() == "PLANNER_RESPONSE")
+                    if (
+                        root.TryGetProperty("type", out var typeProp)
+                        && typeProp.GetString() == "PLANNER_RESPONSE"
+                    )
                     {
-                        if (root.TryGetProperty("content", out var contentProp) && contentProp.ValueKind == JsonValueKind.String)
+                        if (
+                            root.TryGetProperty("content", out var contentProp)
+                            && contentProp.ValueKind == JsonValueKind.String
+                        )
                         {
                             var content = contentProp.GetString();
                             if (!string.IsNullOrEmpty(content))
@@ -156,10 +182,14 @@ public class AgyChat : IAgentChat
         }
         catch (Exception ex)
         {
-            _logger.LogError($"[Transcript] Error reading transcript for session '{sessionId}': {ex.Message}");
+            _logger.LogError(
+                $"[Transcript] Error reading transcript for session '{sessionId}': {ex.Message}"
+            );
         }
 
-        _logger.LogInformation($"[Transcript] Read {linesRead} lines, {responsesFound} planner responses (session='{sessionId}')");
+        _logger.LogInformation(
+            $"[Transcript] Read {linesRead} lines, {responsesFound} planner responses (session='{sessionId}')"
+        );
         return finalContent;
     }
 

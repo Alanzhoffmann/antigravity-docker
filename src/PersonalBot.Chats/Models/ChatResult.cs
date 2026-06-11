@@ -1,4 +1,4 @@
-namespace PersonalBot.Api.Models;
+namespace PersonalBot.Chats.Models;
 
 public record ChatResult(string Output, string ConversationId, string? ArtifactOutput)
 {

@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using PersonalBot.Data.Interfaces;
+using PersonalBot.Data.Models;
 
 namespace PersonalBot.Workers;
 
@@ -36,4 +37,6 @@ public class QueueProcessor : BackgroundService
             // Process the task here
         }
     }
+
+    private async Task ExecuteAiTask(AiTask task) { }
 }
