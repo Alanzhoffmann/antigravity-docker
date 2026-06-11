@@ -23,18 +23,24 @@ public class ProcessUtils
             $"Executing: {fileName} {string.Join(" ", arguments)} (cwd='{workingDirectory}')"
         );
 
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = fileName,
+            WorkingDirectory = workingDirectory,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+
+        foreach (var argument in arguments)
+        {
+            startInfo.ArgumentList.Add(argument);
+        }
+
         var sw = Stopwatch.StartNew();
         var output = await Process.RunAndCaptureTextAsync(
-            new ProcessStartInfo
-            {
-                FileName = fileName,
-                Arguments = string.Join(" ", arguments),
-                WorkingDirectory = workingDirectory,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true,
-            },
+            startInfo,
             cancellationToken: cancellationToken
         );
 
