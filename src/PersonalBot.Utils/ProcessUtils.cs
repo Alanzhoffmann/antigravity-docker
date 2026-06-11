@@ -20,7 +20,10 @@ public class ProcessUtils
     )
     {
         _logger.LogInformation(
-            $"Executing: {fileName} {string.Join(" ", arguments)} (cwd='{workingDirectory}')"
+            "Executing: {FileName} {Arguments} (cwd='{WorkingDirectory}')",
+            fileName,
+            arguments,
+            workingDirectory
         );
 
         var startInfo = new ProcessStartInfo

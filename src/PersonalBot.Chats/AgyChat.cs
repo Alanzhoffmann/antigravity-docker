@@ -10,7 +10,7 @@ using PersonalBot.Utils;
 
 namespace PersonalBot.Chats;
 
-internal class AgyChat : IAgentChat
+internal partial class AgyChat : IAgentChat
 {
     private readonly ILogger<AgyChat> _logger;
     private readonly IOptionsMonitor<AgyOptions> _optionsMonitor;
@@ -45,7 +45,11 @@ internal class AgyChat : IAgentChat
         CancellationToken cancellationToken = default
     )
     {
-        (string agentOutput, string? log) = await ExecuteAgyHeadless(repoPath, prompt);
+        (string agentOutput, string? log) = await ExecuteAgyHeadless(
+            repoPath,
+            prompt,
+            cancellationToken: cancellationToken
+        );
 
         if (string.IsNullOrEmpty(agentOutput))
         {
@@ -53,12 +57,17 @@ internal class AgyChat : IAgentChat
                 log?.Contains("RESOURCE_EXHAUSTED (code 429): Individual quota reached") ?? false;
             if (hasExhaustedError)
             {
+                _logger.LogWarning("Exhausted tokens for AgyChat");
                 _lastExhaustedTokenTime = _timeProvider.GetUtcNow();
             }
         }
 
         string newSessionId = ExtractConversationId(agentOutput);
-        _logger.LogInformation($"[Processor] Issue #{issueNum} session: '{newSessionId}'");
+        _logger.LogInformation(
+            "[Processor] Issue #{issueNum} session: '{newSessionId}'",
+            issueNum,
+            newSessionId
+        );
         string cleanResponse = GetFinalResponseFromTranscript(newSessionId);
         if (string.IsNullOrEmpty(cleanResponse))
         {
@@ -67,10 +76,13 @@ internal class AgyChat : IAgentChat
         }
 
         // Embed the plan artifact content directly in the comment if available
-        string planContent = await TryReadPlanArtifact(newSessionId);
+        string planContent = await TryReadPlanArtifactAsync(newSessionId);
         if (string.IsNullOrEmpty(planContent))
         {
-            _logger.LogWarning($"[Processor] No plan artifact found for session '{newSessionId}'");
+            _logger.LogWarning(
+                "[Processor] No plan artifact found for session '{newSessionId}'",
+                newSessionId
+            );
         }
 
         return new ChatResult(cleanResponse, newSessionId, planContent);
@@ -93,10 +105,13 @@ internal class AgyChat : IAgentChat
         var arguments = new List<string>();
         if (!string.IsNullOrEmpty(conversationId))
         {
-            arguments.Add($"--conversation {conversationId}");
+            arguments.Add("--conversation");
+            arguments.Add(conversationId);
         }
-        arguments.Add($"--prompt \"{prompt}\"");
-        arguments.Add($"--log-file {logFileName}");
+        arguments.Add("--prompt");
+        arguments.Add($"\"{prompt}\"");
+        arguments.Add("--log-file");
+        arguments.Add("logFileName");
 
         var output = await _processUtils.RunProcessAsync(
             "agy",
@@ -116,13 +131,11 @@ internal class AgyChat : IAgentChat
 
     string ExtractConversationId(string agyOutput)
     {
-        var match = Regex.Match(
-            agyOutput,
-            @"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
-        );
+        var match = ConversationIdRegex.Match(agyOutput);
         string id = match.Success ? match.Value : string.Empty;
         _logger.LogInformation(
-            $"[AgyRunner] Extracted conversation ID: '{(string.IsNullOrEmpty(id) ? "none found" : id)}'"
+            "[AgyRunner] Extracted conversation ID: '{ConversationId}'",
+            string.IsNullOrEmpty(id) ? "none found" : id
         );
         return id;
     }
@@ -134,11 +147,17 @@ internal class AgyChat : IAgentChat
 
         var transcriptPath =
             $"/root/.gemini/antigravity-cli/brain/{sessionId}/.system_generated/logs/transcript.jsonl";
-        _logger.LogInformation($"[Transcript] Reading transcript for session '{sessionId}'");
+        _logger.LogInformation(
+            "[Transcript] Reading transcript for session '{sessionId}'",
+            sessionId
+        );
 
         if (!File.Exists(transcriptPath))
         {
-            _logger.LogWarning($"[Transcript] Transcript not found at '{transcriptPath}'");
+            _logger.LogWarning(
+                "[Transcript] Transcript not found at '{transcriptPath}'",
+                transcriptPath
+            );
             return string.Empty;
         }
 
@@ -183,21 +202,33 @@ internal class AgyChat : IAgentChat
         catch (Exception ex)
         {
             _logger.LogError(
-                $"[Transcript] Error reading transcript for session '{sessionId}': {ex.Message}"
+                ex,
+                "[Transcript] Error reading transcript for session '{sessionId}': {ExceptionMessage}",
+                sessionId,
+                ex.Message
             );
         }
 
         _logger.LogInformation(
-            $"[Transcript] Read {linesRead} lines, {responsesFound} planner responses (session='{sessionId}')"
+            "[Transcript] Read {linesRead} lines, {responsesFound} planner responses (session='{sessionId}')",
+            linesRead,
+            responsesFound,
+            sessionId
         );
         return finalContent;
     }
 
-    private async Task<string> TryReadPlanArtifact(string sessionId)
+    private async Task<string> TryReadPlanArtifactAsync(
+        string sessionId,
+        CancellationToken cancellationToken = default
+    )
     {
         if (string.IsNullOrEmpty(sessionId))
             return string.Empty;
         string dir = $"/root/.gemini/antigravity-cli/brain/{sessionId}";
-        return await _artifactParser.TryReadPlanArtifact(dir);
+        return await _artifactParser.TryReadPlanArtifact(dir, cancellationToken);
     }
+
+    [GeneratedRegex(@"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")]
+    private static partial Regex ConversationIdRegex { get; }
 }

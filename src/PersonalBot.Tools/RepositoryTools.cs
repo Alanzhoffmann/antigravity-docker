@@ -1,5 +1,4 @@
 using System.ComponentModel;
-using System.Diagnostics;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using PersonalBot.Utils;
@@ -38,8 +37,15 @@ public class RepositoryTools
     )
     {
         string fullPath = Path.Combine(_repoPath, relativeFilePath);
+
+        _logger.LogInformation("Reading file {FilePath}", fullPath);
+
         if (!File.Exists(fullPath))
+        {
+            _logger.LogWarning("File {FilePath} not found", fullPath);
             return $"Error: File {relativeFilePath} not found.";
+        }
+
         return await File.ReadAllTextAsync(fullPath);
     }
 
@@ -50,6 +56,9 @@ public class RepositoryTools
     )
     {
         string fullPath = Path.Combine(_repoPath, relativeFilePath);
+
+        _logger.LogInformation("Writing to file {FilePath}", fullPath);
+
         await File.WriteAllTextAsync(fullPath, newContent);
         return $"Success: File {relativeFilePath} has been updated.";
     }

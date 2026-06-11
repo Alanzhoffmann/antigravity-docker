@@ -82,7 +82,7 @@ internal class OllamaChat : IAgentChat
             2. You can use pipes (|) and redirects (>) in your bash commands.
             3. If a bash command fails, read the error output and try again.
             4. To edit C#, prioritize using the Roslyn AST tools (FindReferences, ReplaceMethodCode) over standard bash text editors like sed or nano.
-            5. When your task is complete, ensure you have committed and pushed your branch via bash.
+            5. If asked for code, when your task is complete ensure you have committed and pushed your branch via bash.
             """,
             tools: [.. repositoryTools.Tools, .. roslynAgentTools.Tools]
         );

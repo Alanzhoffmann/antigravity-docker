@@ -46,12 +46,10 @@ public class RoslynAgentToolsFactory
 
         if (solutionFiles.Length > 0)
         {
-            _logger.LogInformation("Loading solution file: {SolutionFile}", solutionOrProjectFile);
             await tools.LoadSolutionAsync(solutionOrProjectFile);
         }
         else
         {
-            _logger.LogInformation("Loading project file: {ProjectFile}", solutionOrProjectFile);
             await tools.LoadProjectAsync(solutionOrProjectFile);
         }
 

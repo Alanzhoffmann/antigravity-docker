@@ -18,7 +18,7 @@ public class ArtifactParser
     {
         if (!Directory.Exists(directory))
         {
-            _logger.LogWarning($"[Artifact] Artifact dir not found: '{directory}'");
+            _logger.LogWarning("Artifact directory not found: '{Directory}'", directory);
             return string.Empty;
         }
 
@@ -29,7 +29,7 @@ public class ArtifactParser
 
         if (candidates.Length == 0)
         {
-            _logger.LogWarning($"[Artifact] No markdown artifacts in '{directory}'");
+            _logger.LogWarning("No markdown artifacts in '{Directory}'", directory);
             return string.Empty;
         }
 
@@ -37,13 +37,15 @@ public class ArtifactParser
         {
             string content = await File.ReadAllTextAsync(candidates[0], cancellationToken);
             _logger.LogInformation(
-                $"[Artifact] Read plan artifact '{candidates[0]}': {content.Length} chars"
+                "Read plan artifact '{PlanArtifact}': {ContentLength} chars",
+                candidates[0],
+                content.Length
             );
             return content;
         }
         catch (Exception ex)
         {
-            _logger.LogError($"[Artifact] Failed reading artifact: {ex.Message}");
+            _logger.LogError(ex, "Failed reading artifact: {ExceptionMessage}", ex.Message);
             return string.Empty;
         }
     }

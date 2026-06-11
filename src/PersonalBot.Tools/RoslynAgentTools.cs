@@ -1,9 +1,10 @@
 using System.ComponentModel;
 using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.Formatting;
 using Microsoft.CodeAnalysis.MSBuild;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
+
+namespace PersonalBot.Tools;
 
 public class RoslynAgentTools : IDisposable
 {
@@ -47,11 +48,13 @@ public class RoslynAgentTools : IDisposable
 
     internal async Task LoadSolutionAsync(string solutionPath)
     {
+        _logger.LogInformation("Loading solution {SolutionPath}", solutionPath);
         CurrentSolution = await _workspace.OpenSolutionAsync(solutionPath);
     }
 
     internal async Task LoadProjectAsync(string projectPath)
     {
+        _logger.LogInformation("Loading project {ProjectPath}", projectPath);
         var project = await _workspace.OpenProjectAsync(projectPath);
         CurrentSolution = project.Solution;
     }
@@ -59,6 +62,7 @@ public class RoslynAgentTools : IDisposable
     [Description("Lists all projects in the solution.")]
     public Task<string> ListProjects()
     {
+        _logger.LogInformation("Listing all projects");
         var projectNames = CurrentSolution.Projects.Select(p => p.Name);
         return Task.FromResult(string.Join("\n", projectNames));
     }
@@ -70,6 +74,8 @@ public class RoslynAgentTools : IDisposable
         [Description("The exact name of the symbol to find")] string symbolName
     )
     {
+        _logger.LogInformation("Finding references for {SymbolName}", symbolName);
+
         ISymbol? targetSymbol = null;
 
         // 1. Hunt for the symbol's definition across all projects in the solution
@@ -123,6 +129,8 @@ public class RoslynAgentTools : IDisposable
         [Description("The name of the method")] string methodName
     )
     {
+        _logger.LogInformation("Reading method {MethodName} from {FileName}", methodName, fileName);
+
         var document = FindDocument(fileName);
         if (document == null)
             return $"File '{fileName}' not found in the solution.";
@@ -144,6 +152,8 @@ public class RoslynAgentTools : IDisposable
         [Description("The new C# code for the method")] string newMethodCode
     )
     {
+        _logger.LogInformation("Replacing {MethodName} in {FileName}", methodName, fileName);
+
         var document = FindDocument(fileName);
         if (document == null)
             return "File not found.";
