@@ -1,3 +1,4 @@
+using PersonalBot.Chats.Enums;
 using PersonalBot.Chats.Models;
 
 namespace PersonalBot.Chats.Interfaces;
@@ -10,6 +11,7 @@ public interface IAgentChat
         string repoPath,
         string issueNum,
         string prompt,
+        AgentPhase phase = AgentPhase.Planning,
         CancellationToken cancellationToken = default
     );
 }
@@ -24,6 +26,7 @@ internal class NullChat : IAgentChat
         string repoPath,
         string issueNum,
         string prompt,
+        AgentPhase phase = AgentPhase.Planning,
         CancellationToken cancellationToken = default
     )
     {

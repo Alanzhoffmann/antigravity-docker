@@ -37,14 +37,14 @@ public class RoslynAgentTools : IDisposable
         private set => _currentSolution = value;
     }
 
-    public IList<AITool> Tools =>
-        new List<AITool>
-        {
+    public IList<AITool> ReadOnlyTools =>
+        [
             AIFunctionFactory.Create(FindReferences),
             AIFunctionFactory.Create(ReadMethodCode),
-            AIFunctionFactory.Create(ReplaceMethodCode),
             AIFunctionFactory.Create(ListProjects),
-        };
+        ];
+
+    public IList<AITool> Tools => [.. ReadOnlyTools, AIFunctionFactory.Create(ReplaceMethodCode)];
 
     internal async Task LoadSolutionAsync(string solutionPath)
     {

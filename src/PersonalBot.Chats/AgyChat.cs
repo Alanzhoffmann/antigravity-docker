@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using PersonalBot.Chats.Enums;
 using PersonalBot.Chats.Interfaces;
 using PersonalBot.Chats.Models;
 using PersonalBot.Chats.Options;
@@ -42,6 +43,7 @@ internal partial class AgyChat : IAgentChat
         string repoPath,
         string issueNum,
         string prompt,
+        AgentPhase phase = AgentPhase.Planning,
         CancellationToken cancellationToken = default
     )
     {

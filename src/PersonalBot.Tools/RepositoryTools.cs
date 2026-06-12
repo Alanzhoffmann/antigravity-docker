@@ -22,13 +22,10 @@ public class RepositoryTools
         _processUtils = processUtils;
     }
 
-    public IList<AITool> Tools =>
-        new List<AITool>
-        {
-            AIFunctionFactory.Create(RunBashCommand),
-            AIFunctionFactory.Create(ReadFile),
-            AIFunctionFactory.Create(WriteFile),
-        };
+    public IList<AITool> ReadOnlyTools =>
+        [AIFunctionFactory.Create(RunBashCommand), AIFunctionFactory.Create(ReadFile)];
+
+    public IList<AITool> Tools => [.. ReadOnlyTools, AIFunctionFactory.Create(WriteFile)];
 
     [Description("Reads the contents of a specific file in the repository.")]
     public async Task<string> ReadFile(
