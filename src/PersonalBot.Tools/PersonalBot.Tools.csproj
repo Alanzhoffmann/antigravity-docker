@@ -18,7 +18,7 @@
 
     <PackageReference
       Include="Microsoft.Build.Framework"
-      Version="17.11.48"
+      Version="18.4.0"
       ExcludeAssets="runtime"
       PrivateAssets="all"
     />

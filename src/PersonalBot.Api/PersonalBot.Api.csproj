@@ -3,9 +3,28 @@
     <TargetFramework>net11.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+
+    <ExcludeRuntimeAssetsForMicrosoftBuildPackages>true</ExcludeRuntimeAssetsForMicrosoftBuildPackages>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\PersonalBot.Workers\PersonalBot.Workers.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference
+      Include="Microsoft.EntityFrameworkCore.Design"
+      Version="11.0.0-preview.5.26302.115"
+    >
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+
+    <PackageReference
+      Include="Microsoft.Build.Framework"
+      Version="18.4.0"
+      ExcludeAssets="runtime"
+      PrivateAssets="all"
+    />
   </ItemGroup>
 </Project>

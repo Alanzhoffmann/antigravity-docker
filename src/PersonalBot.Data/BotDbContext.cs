@@ -19,4 +19,9 @@ public class BotDbContext : DbContext
     public DbSet<GitHubWebhook> Webhooks => Set<GitHubWebhook>();
 
     public MigrationState<BotDbContext> MigrationState { get; }
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        modelBuilder.ApplyConfigurationsFromAssembly(typeof(BotDbContext).Assembly);
+    }
 }
