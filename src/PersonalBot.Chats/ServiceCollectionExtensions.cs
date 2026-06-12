@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
+using PersonalBot.Chats.Implementations;
 using PersonalBot.Chats.Interfaces;
 using PersonalBot.Chats.Options;
 using PersonalBot.Tools;
@@ -26,11 +27,11 @@ public static class ServiceCollectionExtensions
             }
         );
 
-        services.AddSingleton<IAgentChat, OllamaChat>();
-        services.AddSingleton<IAgentChat, AgyChat>();
-        services.AddSingleton<IAgentChat, NullChat>();
+        services.TryAddSingleton<IAgentChat, OllamaChat>();
+        services.TryAddSingleton<IAgentChat, AgyChat>();
+        services.TryAddSingleton<IAgentChat, NullChat>();
 
-        services.AddTransient<IChatResolver, ChatResolver>();
+        services.TryAddTransient<IChatResolver, ChatResolver>();
 
         services.AddOptions<OllamaOptions>().BindConfiguration(OllamaOptions.SectionName);
         services.AddOptions<AgyOptions>().BindConfiguration(AgyOptions.SectionName);

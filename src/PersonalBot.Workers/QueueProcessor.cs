@@ -19,9 +19,9 @@ public class QueueProcessor : BackgroundService
         {
             var scope = _serviceScopeFactory.CreateScope();
             var chatRunner = scope.ServiceProvider.GetRequiredService<ChatRunner>();
-            
+
             await chatRunner.RunNextAsync(stoppingToken);
-            
+
             await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
         }
     }

@@ -9,7 +9,7 @@ using PersonalBot.Data.Models;
 using PersonalBot.Tools;
 using PersonalBot.Utils;
 
-namespace PersonalBot.Chats;
+namespace PersonalBot.Chats.Implementations;
 
 internal partial class AgyChat : IAgentChat
 {
@@ -77,7 +77,7 @@ internal partial class AgyChat : IAgentChat
         }
 
         // Embed the plan artifact content directly in the comment if available
-        string planContent = await TryReadPlanArtifactAsync(newSessionId);
+        string planContent = await TryReadPlanArtifactAsync(newSessionId, cancellationToken);
         if (string.IsNullOrEmpty(planContent))
         {
             _logger.LogWarning(
@@ -148,6 +148,7 @@ internal partial class AgyChat : IAgentChat
 
         var transcriptPath =
             $"/root/.gemini/antigravity-cli/brain/{sessionId}/.system_generated/logs/transcript.jsonl";
+
         _logger.LogInformation(
             "[Transcript] Reading transcript for session '{sessionId}'",
             sessionId

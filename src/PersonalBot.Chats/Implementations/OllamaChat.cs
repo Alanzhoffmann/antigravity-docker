@@ -13,7 +13,7 @@ using PersonalBot.Data.Models.Enums;
 using PersonalBot.Tools;
 using PersonalBot.Tools.Factories;
 
-namespace PersonalBot.Chats;
+namespace PersonalBot.Chats.Implementations;
 
 internal class OllamaChat : IAgentChat
 {

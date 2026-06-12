@@ -10,20 +10,17 @@ namespace PersonalBot.Api;
 public partial class WebhookProcessor
 {
     private readonly ILogger<WebhookProcessor> _logger;
+    private readonly GitHubUtils _gitHubUtils;
     private readonly IAgentChat _agentChat;
-    private readonly ProcessUtils _processUtils;
-    private const string BotWatermark = "<!-- from-bot: true -->";
 
     // Deduplicate in-flight issue processing tasks
     readonly ConcurrentDictionary<string, Task> inFlightIssues = new();
-    readonly string workspaceBase = "/app/workspaces";
 
-    public WebhookProcessor(ILogger<WebhookProcessor> logger, IChatResolver chatResolver, ProcessUtils processUtils)
+    public WebhookProcessor(ILogger<WebhookProcessor> logger, IChatResolver chatResolver, GitHubUtils gitHubUtils)
     {
         _logger = logger;
+        _gitHubUtils = gitHubUtils;
         _agentChat = chatResolver.ResolveCurrent();
-
-        _processUtils = processUtils;
     }
 
     public async ValueTask ProcessWebhookAsync(
@@ -53,8 +50,8 @@ public partial class WebhookProcessor
             }
 
             // Each issue gets its own isolated clone so branches and commits never bleed across issues
-            string localRepoPath = GetIssueRepoPath(repoName, issueNum);
-            await EnsureRepoAsync(localRepoPath, cloneUrl, repoName, issueNum, cancellationToken);
+            string localRepoPath = GitHubUtils.GetIssueRepoPath(repoName, issueNum);
+            await _gitHubUtils.EnsureRepoAsync(localRepoPath, cloneUrl, repoName, issueNum, cancellationToken);
 
             string issueKey = $"{repoName}#{issueNum}";
             if (inFlightIssues.ContainsKey(issueKey))
@@ -92,7 +89,7 @@ INSTRUCTIONS:
                         cancellationToken
                     );
                     var comment = !string.IsNullOrEmpty(artifactOutput) ? artifactOutput : cleanResponse;
-                    await PostGitHubCommentAsync(localRepoPath, issueNum, comment, newSessionId, cancellationToken);
+                    await _gitHubUtils.PostGitHubCommentAsync(localRepoPath, issueNum, comment, newSessionId, cancellationToken);
                 },
                 CancellationToken.None
             );
@@ -122,9 +119,9 @@ INSTRUCTIONS:
                     _logger.LogWarning($"[Processor] reaction event missing issue.number");
                     return;
                 }
-                string localRepoPath = GetIssueRepoPath(repoName, issueNum);
-                await EnsureRepoAsync(localRepoPath, cloneUrl, repoName, issueNum, cancellationToken);
-                string sid = await GetSessionIdFromIssueAsync(localRepoPath, issueNum, cancellationToken);
+                string localRepoPath = GitHubUtils.GetIssueRepoPath(repoName, issueNum);
+                await _gitHubUtils.EnsureRepoAsync(localRepoPath, cloneUrl, repoName, issueNum, cancellationToken);
+                string sid = await _gitHubUtils.GetSessionIdFromIssueAsync(localRepoPath, issueNum, cancellationToken);
                 if (!string.IsNullOrEmpty(sid))
                     await HandleApprovalAsync(localRepoPath, issueNum, sid, cancellationToken);
                 else
@@ -144,16 +141,16 @@ INSTRUCTIONS:
                 return;
             }
 
-            if (IsOwnComment(commentBody))
+            if (GitHubUtils.IsOwnComment(commentBody))
             {
                 _logger.LogInformation($"[Processor] Skipping Bot comment to prevent loop");
                 return;
             }
 
-            string localRepoPath = GetIssueRepoPath(repoName, issueNum);
-            await EnsureRepoAsync(localRepoPath, cloneUrl, repoName, issueNum, cancellationToken);
+            string localRepoPath = GitHubUtils.GetIssueRepoPath(repoName, issueNum);
+            await _gitHubUtils.EnsureRepoAsync(localRepoPath, cloneUrl, repoName, issueNum, cancellationToken);
 
-            string activeSessionId = await GetSessionIdFromIssueAsync(localRepoPath, issueNum, cancellationToken);
+            string activeSessionId = await _gitHubUtils.GetSessionIdFromIssueAsync(localRepoPath, issueNum, cancellationToken);
             _logger.LogInformation("[Processor] issue_comment #{issueNum} activeSession='{activeSessionId}'", issueNum, activeSessionId);
             if (string.IsNullOrEmpty(activeSessionId))
             {
@@ -186,7 +183,7 @@ INSTRUCTIONS:
                     cancellationToken
                 );
                 var comment = !string.IsNullOrEmpty(response.ArtifactOutput) ? response.ArtifactOutput : response.Output;
-                await PostGitHubCommentAsync(localRepoPath, issueNum, comment, activeSessionId, cancellationToken);
+                await _gitHubUtils.PostGitHubCommentAsync(localRepoPath, issueNum, comment, activeSessionId, cancellationToken);
             }
             return;
         }
@@ -203,7 +200,7 @@ INSTRUCTIONS:
                 if (issueMatch.Success)
                 {
                     string issueNum = issueMatch.Groups[1].Value;
-                    string path = GetIssueRepoPath(repoName, issueNum);
+                    string path = GitHubUtils.GetIssueRepoPath(repoName, issueNum);
                     if (Directory.Exists(path))
                     {
                         _logger.LogInformation("[Processor] Deleting isolated clone for issue #{issueNum}: '{path}'", issueNum, path);
@@ -226,8 +223,6 @@ INSTRUCTIONS:
         await ValueTask.CompletedTask;
     }
 
-    string GetIssueRepoPath(string repoName, string issueNum) => $"{workspaceBase}/{repoName}-issue-{issueNum}";
-
     async Task HandleApprovalAsync(string localRepoPath, string issueNum, string sessionId, CancellationToken cancellationToken = default)
     {
         _logger.LogInformation("[Approval] Plan approved for issue #{issueNum} (session={sessionId}) — starting implementation", issueNum, sessionId);
@@ -243,59 +238,10 @@ INSTRUCTIONS:
             },
             cancellationToken
         );
-        await PostGitHubCommentAsync(localRepoPath, issueNum, response, sessionId, cancellationToken);
+        await _gitHubUtils.PostGitHubCommentAsync(localRepoPath, issueNum, response, sessionId, cancellationToken);
         _logger.LogInformation("[Approval] Implementation complete for issue #{issueNum}", issueNum);
     }
 
-    async Task EnsureRepoAsync(string localRepoPath, string cloneUrl, string repoName, string issueNum, CancellationToken cancellationToken = default)
-    {
-        if (!Directory.Exists(localRepoPath))
-        {
-            if (string.IsNullOrEmpty(cloneUrl))
-            {
-                _logger.LogWarning("[RepoManager] No clone_url for {repoName}#{issueNum}", repoName, issueNum);
-                return;
-            }
-            _logger.LogInformation("[RepoManager] Cloning '{cloneUrl}' -> '{localRepoPath}'", cloneUrl, localRepoPath);
-            await _processUtils.RunProcessAsync("git", ["clone", cloneUrl, localRepoPath], workspaceBase, cancellationToken);
-        }
-        else
-        {
-            _logger.LogInformation("[RepoManager] Pulling latest in '{localRepoPath}'", localRepoPath);
-            await _processUtils.RunProcessAsync("git", ["pull"], localRepoPath, cancellationToken);
-        }
-    }
-
-    async Task PostGitHubCommentAsync(string repoPath, string issueNum, string body, string sessionId, CancellationToken cancellationToken = default)
-    {
-        string payload = string.IsNullOrEmpty(sessionId) ? body : $"{body}\n\n<!-- agy-session-id: {sessionId} -->";
-
-        payload += $"\n\n{BotWatermark}";
-
-        _logger.LogInformation(
-            "[GitHub] Posting comment on issue #{issueNum} (session='{sessionId}', length={PayloadLength})",
-            issueNum,
-            sessionId,
-            payload.Length
-        );
-        await _processUtils.RunProcessAsync("gh", ["issue", "comment", issueNum, "--body", payload], repoPath, cancellationToken);
-    }
-
-    async Task<string> GetSessionIdFromIssueAsync(string repoPath, string issueNum, CancellationToken cancellationToken = default)
-    {
-        _logger.LogInformation("[GitHub] Fetching session ID from issue #{issueNum}", issueNum);
-        string commentsJson = await _processUtils.RunProcessAsync("gh", ["issue", "view", issueNum, "--json", "comments"], repoPath, cancellationToken);
-        var match = SessionIdRegex.Match(commentsJson);
-        string sessionId = match.Success ? match.Groups[1].Value : string.Empty;
-        _logger.LogInformation("[GitHub] Session ID for issue #{issueNum}: '{sessionId}'", issueNum, string.IsNullOrEmpty(sessionId) ? "none" : sessionId);
-        return sessionId;
-    }
-
-    static bool IsOwnComment(string commentBody) => commentBody.Contains(BotWatermark);
-
     [GeneratedRegex(@"fix/issue-(\d+)")]
     private static partial Regex IssueRegex { get; }
-
-    [GeneratedRegex(@"<!-- agy-session-id: ([a-zA-Z0-9\-]+) -->", RegexOptions.RightToLeft)]
-    private static partial Regex SessionIdRegex { get; }
 }
