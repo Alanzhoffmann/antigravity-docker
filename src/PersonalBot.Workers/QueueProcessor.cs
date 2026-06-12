@@ -1,7 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using PersonalBot.Data.Interfaces;
-using PersonalBot.Data.Models;
+using PersonalBot.Chats;
 
 namespace PersonalBot.Workers;
 
@@ -19,24 +18,11 @@ public class QueueProcessor : BackgroundService
         while (!stoppingToken.IsCancellationRequested)
         {
             var scope = _serviceScopeFactory.CreateScope();
-            var taskService = scope.ServiceProvider.GetRequiredService<ITaskService>();
-
-            await ProcessTasksAsync(taskService, stoppingToken);
+            var chatRunner = scope.ServiceProvider.GetRequiredService<ChatRunner>();
+            
+            await chatRunner.RunNextAsync(stoppingToken);
+            
             await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
         }
     }
-
-    private async Task ProcessTasksAsync(
-        ITaskService taskService,
-        CancellationToken cancellationToken
-    )
-    {
-        var nextTask = await taskService.GetNextPendingTaskAsync(cancellationToken);
-        if (nextTask is not null)
-        {
-            // Process the task here
-        }
-    }
-
-    private async Task ExecuteAiTask(AiTask task) { }
 }

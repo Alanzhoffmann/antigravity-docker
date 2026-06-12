@@ -1,4 +1,4 @@
-namespace PersonalBot.Chats.Enums;
+namespace PersonalBot.Data.Models.Enums;
 
 public enum AgentPhase
 {

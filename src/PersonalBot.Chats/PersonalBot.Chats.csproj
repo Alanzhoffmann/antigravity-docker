@@ -13,5 +13,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\PersonalBot.Tools\PersonalBot.Tools.csproj" />
+    <ProjectReference Include="..\PersonalBot.Data\PersonalBot.Data.csproj" />
   </ItemGroup>
 </Project>

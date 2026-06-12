@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using PersonalBot.Data.Interfaces;
 using PersonalBot.Data.Models;
+using PersonalBot.Data.Models.Enums;
 
 namespace PersonalBot.Data.Internal;
 

@@ -2,10 +2,10 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using PersonalBot.Chats.Enums;
 using PersonalBot.Chats.Interfaces;
 using PersonalBot.Chats.Models;
 using PersonalBot.Chats.Options;
+using PersonalBot.Data.Models;
 using PersonalBot.Tools;
 using PersonalBot.Utils;
 
@@ -39,17 +39,16 @@ internal partial class AgyChat : IAgentChat
         _optionsMonitor.CurrentValue.IsEnabled
         && (_lastExhaustedTokenTime - _timeProvider.GetUtcNow()).TotalSeconds > 600;
 
+    public string AgentName => nameof(AgyChat);
+
     public async Task<ChatResult> GetResponseAsync(
-        string repoPath,
-        string issueNum,
-        string prompt,
-        AgentPhase phase = AgentPhase.Planning,
+        AiTask aiTask,
         CancellationToken cancellationToken = default
     )
     {
         (string agentOutput, string? log) = await ExecuteAgyHeadless(
-            repoPath,
-            prompt,
+            aiTask.RepoPath,
+            aiTask.Prompt,
             cancellationToken: cancellationToken
         );
 
@@ -67,7 +66,7 @@ internal partial class AgyChat : IAgentChat
         string newSessionId = ExtractConversationId(agentOutput);
         _logger.LogInformation(
             "[Processor] Issue #{issueNum} session: '{newSessionId}'",
-            issueNum,
+            aiTask.IssueNum,
             newSessionId
         );
         string cleanResponse = GetFinalResponseFromTranscript(newSessionId);

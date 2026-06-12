@@ -1,8 +1,8 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using PersonalBot.Chats.Enums;
 using PersonalBot.Chats.Interfaces;
+using PersonalBot.Data.Models.Enums;
 using PersonalBot.Utils;
 
 namespace PersonalBot.Api;
@@ -82,10 +82,13 @@ INSTRUCTIONS:
                 async () =>
                 {
                     (string cleanResponse, string newSessionId, string? artifactOutput) = await _agentChat.GetResponseAsync(
-                        localRepoPath,
-                        issueNum,
-                        prompt,
-                        AgentPhase.Planning,
+                        new()
+                        {
+                            RepoPath = localRepoPath,
+                            IssueNum = issueNum,
+                            Prompt = prompt,
+                            Phase = AgentPhase.Planning,
+                        },
                         cancellationToken
                     );
                     var comment = !string.IsNullOrEmpty(artifactOutput) ? artifactOutput : cleanResponse;
@@ -172,7 +175,16 @@ INSTRUCTIONS:
                 string execPrompt =
                     $"Feedback received on Issue #{issueNum}: '{commentBody}'. Update the plan accordingly. Post an updated plan artifact and ask for another 👍 to proceed.";
                 _logger.LogInformation("[Processor] Feedback on #{issueNum}: '{CommentBody}'", issueNum, commentBody[..Math.Min(80, commentBody.Length)]);
-                var response = await _agentChat.GetResponseAsync(localRepoPath, issueNum, execPrompt, AgentPhase.Planning, cancellationToken);
+                var response = await _agentChat.GetResponseAsync(
+                    new()
+                    {
+                        RepoPath = localRepoPath,
+                        IssueNum = issueNum,
+                        Prompt = execPrompt,
+                        Phase = AgentPhase.Planning,
+                    },
+                    cancellationToken
+                );
                 var comment = !string.IsNullOrEmpty(response.ArtifactOutput) ? response.ArtifactOutput : response.Output;
                 await PostGitHubCommentAsync(localRepoPath, issueNum, comment, activeSessionId, cancellationToken);
             }
@@ -221,7 +233,16 @@ INSTRUCTIONS:
         _logger.LogInformation("[Approval] Plan approved for issue #{issueNum} (session={sessionId}) — starting implementation", issueNum, sessionId);
         string prompt =
             $"The plan for Issue #{issueNum} has been approved. Create branch 'fix/issue-{issueNum}', implement the code changes, run any available local tests, and raise a PR via `gh pr create`. Commit only changes related to this issue.";
-        string response = await _agentChat.GetResponseAsync(localRepoPath, issueNum, prompt, AgentPhase.Execution, cancellationToken);
+        string response = await _agentChat.GetResponseAsync(
+            new()
+            {
+                RepoPath = localRepoPath,
+                IssueNum = issueNum,
+                Prompt = prompt,
+                Phase = AgentPhase.Execution,
+            },
+            cancellationToken
+        );
         await PostGitHubCommentAsync(localRepoPath, issueNum, response, sessionId, cancellationToken);
         _logger.LogInformation("[Approval] Implementation complete for issue #{issueNum}", issueNum);
     }

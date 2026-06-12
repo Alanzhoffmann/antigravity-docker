@@ -1,13 +1,15 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
+using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using OllamaSharp;
-using PersonalBot.Chats.Enums;
 using PersonalBot.Chats.Interfaces;
 using PersonalBot.Chats.Models;
 using PersonalBot.Chats.Options;
+using PersonalBot.Data.Models;
+using PersonalBot.Data.Models.Enums;
 using PersonalBot.Tools;
 using PersonalBot.Tools.Factories;
 
@@ -46,13 +48,12 @@ internal class OllamaChat : IAgentChat
     [MemberNotNullWhen(true, nameof(Model), nameof(Url))]
     public bool IsEnabled => Url is not null && !string.IsNullOrEmpty(Model);
 
+    public string AgentName => nameof(OllamaChat);
+
     public int SortOrder => 1;
 
     public async Task<ChatResult> GetResponseAsync(
-        string repoPath,
-        string issueNum,
-        string prompt,
-        AgentPhase phase = AgentPhase.Planning,
+        AiTask aiTask,
         CancellationToken cancellationToken = default
     )
     {
@@ -65,52 +66,96 @@ internal class OllamaChat : IAgentChat
             );
             return new ChatResult(
                 "OllamaChat is not configured properly. Please check the logs for details.",
-                issueNum,
+                aiTask.IssueNum,
                 null
             );
         }
 
-        var repositoryTools = await _repositoryToolsFactory.CreateAsync(repoPath);
-        using var roslynAgentTools = await _roslynAgentToolsFactory.CreateAsync(repoPath);
+        var repositoryTools = await _repositoryToolsFactory.CreateAsync(aiTask.RepoPath);
+        using var roslynAgentTools = await _roslynAgentToolsFactory.CreateAsync(aiTask.RepoPath);
 
         var client = _httpClientFactory.CreateClient(nameof(OllamaChat));
         using IChatClient ollamaClient = new OllamaApiClient(client, Model);
-        string systemInstructions = GetInstructions(phase);
+        string systemInstructions = GetInstructions(aiTask.Phase);
 
         // Security: Only give the execution agent the ability to write code and run bash
         IList<AITool> allowedTools =
-            phase is AgentPhase.Planning
+            aiTask.Phase is AgentPhase.Planning
                 ? [.. repositoryTools.ReadOnlyTools, .. roslynAgentTools.ReadOnlyTools] // Read-only tools
                 : [.. repositoryTools.Tools, .. roslynAgentTools.Tools]; // Full read/write suite
 
         var aiAgent = ollamaClient.AsAIAgent(instructions: systemInstructions, tools: allowedTools);
 
+        var session = await aiAgent.CreateSessionAsync(cancellationToken);
+        var serializedSession = await aiAgent.SerializeSessionAsync(
+            session,
+            cancellationToken: cancellationToken
+        );
+
+        _logger.LogInformation(
+            "This is in new serializedSession: {serializedSession}",
+            serializedSession
+        );
+
         // Start the conversation with context for the AI model
-        if (!_conversationHistories.TryGetValue(issueNum, out var chatHistory))
+        if (!_conversationHistories.TryGetValue(aiTask.IssueNum, out var chatHistory))
         {
             chatHistory = [];
-            _conversationHistories[issueNum] = chatHistory;
+            _conversationHistories[aiTask.IssueNum] = chatHistory;
         }
 
+        session.SetInMemoryChatHistory(chatHistory);
+
+        serializedSession = await aiAgent.SerializeSessionAsync(
+            session,
+            cancellationToken: cancellationToken
+        );
+        _logger.LogInformation(
+            "This is in serializedSession with chat history: {serializedSession}",
+            serializedSession
+        );
+
         // Get user prompt and add to chat history
-        _logger.LogInformation("User prompt for issue #{issueNum}: '{prompt}'", issueNum, prompt);
-        chatHistory.Add(new ChatMessage(ChatRole.User, prompt));
+        _logger.LogInformation(
+            "User prompt for issue #{issueNum}: '{prompt}'",
+            aiTask.IssueNum,
+            aiTask.Prompt
+        );
+        chatHistory.Add(new ChatMessage(ChatRole.User, aiTask.Prompt));
 
         // Stream the AI response and add to chat history
-        _logger.LogInformation("Streaming response for issue #{issueNum}", issueNum);
-        string response = await GetResponse(phase, aiAgent, chatHistory, cancellationToken);
+        _logger.LogInformation("Streaming response for issue #{issueNum}", aiTask.IssueNum);
+        string response = await GetResponse(aiTask.Phase, aiAgent, chatHistory, cancellationToken);
 
         _logger.LogInformation(
             "Full response for issue #{issueNum}: '{response}'",
-            issueNum,
+            aiTask.IssueNum,
             response
         );
 
+        serializedSession = await aiAgent.SerializeSessionAsync(
+            session,
+            cancellationToken: cancellationToken
+        );
+        _logger.LogInformation(
+            "This is in serializedSession after response: {serializedSession}",
+            serializedSession
+        );
+
         chatHistory.Add(new ChatMessage(ChatRole.Assistant, response));
+
+        serializedSession = await aiAgent.SerializeSessionAsync(
+            session,
+            cancellationToken: cancellationToken
+        );
+        _logger.LogInformation(
+            "This is in serializedSession after response added to chat history: {serializedSession}",
+            serializedSession
+        );
         return new ChatResult(
             response,
-            issueNum,
-            await _artifactParser.TryReadPlanArtifact(repoPath)
+            aiTask.IssueNum,
+            await _artifactParser.TryReadPlanArtifact(aiTask.RepoPath)
         );
     }
 
