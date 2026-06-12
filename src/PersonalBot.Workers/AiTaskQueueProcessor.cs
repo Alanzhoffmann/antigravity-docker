@@ -4,11 +4,11 @@ using PersonalBot.Chats;
 
 namespace PersonalBot.Workers;
 
-public class QueueProcessor : BackgroundService
+public class AiTaskQueueProcessor : BackgroundService
 {
     private readonly IServiceScopeFactory _serviceScopeFactory;
 
-    public QueueProcessor(IServiceScopeFactory serviceScopeFactory)
+    public AiTaskQueueProcessor(IServiceScopeFactory serviceScopeFactory)
     {
         _serviceScopeFactory = serviceScopeFactory;
     }

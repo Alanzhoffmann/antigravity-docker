@@ -1,12 +1,9 @@
-using PersonalBot.Api;
 using PersonalBot.Api.Endpoints;
-using PersonalBot.Chats;
+using PersonalBot.Workers;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddChats();
-
-builder.Services.AddScoped<WebhookProcessor>();
+builder.Services.AddBackgroundServices();
 
 var app = builder.Build();
 

@@ -9,7 +9,10 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddBackgroundServices(this IServiceCollection services)
     {
         services.AddDatabase();
-        services.AddHostedService<QueueProcessor>();
+        services.AddHostedService<WebhookBackgroundService>();
+        services.AddScoped<WebhookProcessor>();
+
+        // services.AddHostedService<AiTaskQueueProcessor>();
 
         services.AddChats();
 

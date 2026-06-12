@@ -1,5 +1,6 @@
 using System.Text.Json;
 using PersonalBot.Utils;
+using PersonalBot.Workers;
 
 namespace PersonalBot.Api.Endpoints;
 
