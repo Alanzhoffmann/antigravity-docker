@@ -7,7 +7,7 @@ public static class GithubHookEndpoint
 {
     public static void MapGithubHookEndpoint(this WebApplication app)
     {
-        HashSet<string> supportedRepos = new HashSet<string> { "antigravity-docker" };
+        HashSet<string> supportedRepos = ["antigravity-docker"];
         var logger = app.Logger;
 
         // ─── WEBHOOK ENDPOINT ───────────────────────────────────────────────────────

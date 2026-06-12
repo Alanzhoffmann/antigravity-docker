@@ -19,7 +19,7 @@ internal class OllamaChat : IAgentChat
     private readonly IOptionsMonitor<OllamaOptions> _optionsMonitor;
     private readonly ArtifactParser _artifactParser;
     private readonly IHttpClientFactory _httpClientFactory;
-    private readonly Dictionary<string, List<ChatMessage>> _conversationHistories = new();
+    private readonly Dictionary<string, List<ChatMessage>> _conversationHistories = [];
     private readonly RepositoryToolsFactory _repositoryToolsFactory;
     private readonly RoslynAgentToolsFactory _roslynAgentToolsFactory;
 
