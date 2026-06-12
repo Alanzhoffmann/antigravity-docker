@@ -19,7 +19,7 @@ public partial class GitHubUtils
 
     public async Task EnsureRepoAsync(
         string localRepoPath,
-        string cloneUrl,
+        string? cloneUrl,
         string repoName,
         string issueNum,
         CancellationToken cancellationToken = default
@@ -32,6 +32,7 @@ public partial class GitHubUtils
                 _logger.LogWarning("No clone_url for {repoName}#{issueNum}", repoName, issueNum);
                 return;
             }
+
             _logger.LogInformation(
                 "Cloning '{cloneUrl}' -> '{localRepoPath}'",
                 cloneUrl,

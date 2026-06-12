@@ -59,7 +59,15 @@ public static class GithubHookEndpoint
                 {
                     try
                     {
-                        await webhookProcessor.ProcessWebhookAsync(eventType, deliveryId, rawBody, repoName);
+                        await webhookProcessor.ProcessWebhookAsync(
+                            new()
+                            {
+                                EventType = eventType,
+                                DeliveryId = deliveryId,
+                                RawBody = rawBody,
+                                RepoName = repoName,
+                            }
+                        );
                     }
                     catch (Exception ex)
                     {

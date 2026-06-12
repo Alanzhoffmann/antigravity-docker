@@ -12,4 +12,8 @@
     />
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="11.0.0-preview.5.26302.115" />
   </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PersonalBot.Utils\PersonalBot.Utils.csproj" />
+  </ItemGroup>
 </Project>

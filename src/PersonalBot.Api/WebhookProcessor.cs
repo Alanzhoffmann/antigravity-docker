@@ -1,7 +1,7 @@
 using System.Collections.Concurrent;
-using System.Text.Json;
 using System.Text.RegularExpressions;
 using PersonalBot.Chats.Interfaces;
+using PersonalBot.Data.Models;
 using PersonalBot.Data.Models.Enums;
 using PersonalBot.Utils;
 
@@ -14,7 +14,7 @@ public partial class WebhookProcessor
     private readonly IAgentChat _agentChat;
 
     // Deduplicate in-flight issue processing tasks
-    readonly ConcurrentDictionary<string, Task> inFlightIssues = new();
+    readonly ConcurrentDictionary<string, Task> _inFlightIssues = new();
 
     public WebhookProcessor(ILogger<WebhookProcessor> logger, IChatResolver chatResolver, GitHubUtils gitHubUtils)
     {
@@ -23,77 +23,70 @@ public partial class WebhookProcessor
         _agentChat = chatResolver.ResolveCurrent();
     }
 
-    public async ValueTask ProcessWebhookAsync(
-        string eventType,
-        string deliveryId,
-        string rawBody,
-        string repoName,
-        CancellationToken cancellationToken = default
-    )
+    public async ValueTask ProcessWebhookAsync(GitHubWebhook webhook, CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("[Processor] Processing event='{eventType}' action delivery='{deliveryId}'", eventType, deliveryId);
-        using var document = JsonDocument.Parse(rawBody);
-        var root = document.RootElement;
-        var action = root.GetStringSafe("action") ?? string.Empty;
-        _logger.LogInformation("[Processor] repo='{repoName}' event='{eventType}' action='{action}'", repoName, eventType, action);
+        _logger.LogInformation(
+            "Processing event='{eventType}' action delivery='{deliveryId}' repo='{repoName}' action='{action}'",
+            webhook.EventType,
+            webhook.DeliveryId,
+            webhook.RepoName,
+            webhook.Action
+        );
 
-        var cloneUrl = root.GetNestedStringSafe("repository", "clone_url") ?? string.Empty;
-
-        switch ((eventType, action))
+        switch (webhook)
         {
-            case ("issues", "opened"):
-                await HandleIssueOpened(repoName, root, cloneUrl, cancellationToken);
+            case { EventType: "issues", Action: "opened" }:
+                await HandleIssueOpened(webhook, cancellationToken);
                 break;
-            case ("reaction", "created"):
-                await HandleReactionCreated(repoName, root, cloneUrl, cancellationToken);
+            case { EventType: "reaction", Action: "created" }:
+                await HandleReactionCreated(webhook, cancellationToken);
                 break;
-            case ("issue_comment", "created"):
-                await HandleIssueCommentCreated(repoName, root, cloneUrl, cancellationToken);
+            case { EventType: "issue_comment", Action: "created" }:
+                await HandleIssueCommentCreated(webhook, cancellationToken);
                 break;
-            case ("pull_request", "closed"):
-                HandlePullRequestClosed(repoName, root);
+            case { EventType: "pull_request", Action: "closed" }:
+                HandlePullRequestClosed(webhook);
                 break;
             default:
-                _logger.LogInformation("[Processor] Unhandled event='{eventType}' action='{action}' — no-op", eventType, action);
+                _logger.LogInformation("[Processor] Unhandled event='{eventType}' action='{action}' — no-op", webhook.EventType, webhook.Action);
                 break;
         }
     }
 
-    private async Task HandleIssueOpened(string repoName, JsonElement root, string cloneUrl, CancellationToken cancellationToken)
+    private async Task HandleIssueOpened(GitHubWebhook webhook, CancellationToken cancellationToken)
     {
-        var issueNum = root.GetNestedStringSafe("issue", "number");
-        if (string.IsNullOrEmpty(issueNum))
+        if (string.IsNullOrEmpty(webhook.IssueNumber))
         {
-            _logger.LogWarning($"[Processor] issues/opened missing issue.number");
+            _logger.LogWarning($"issues/opened missing issue.number");
             return;
         }
 
         // Each issue gets its own isolated clone so branches and commits never bleed across issues
-        string localRepoPath = GitHubUtils.GetIssueRepoPath(repoName, issueNum);
-        await _gitHubUtils.EnsureRepoAsync(localRepoPath, cloneUrl, repoName, issueNum, cancellationToken);
+        string localRepoPath = GitHubUtils.GetIssueRepoPath(webhook.RepoName, webhook.IssueNumber);
+        await _gitHubUtils.EnsureRepoAsync(localRepoPath, webhook.CloneUrl, webhook.RepoName, webhook.IssueNumber, cancellationToken);
 
-        string issueKey = $"{repoName}#{issueNum}";
-        if (inFlightIssues.ContainsKey(issueKey))
+        string issueKey = $"{webhook.RepoName}#{webhook.IssueNumber}";
+        if (_inFlightIssues.ContainsKey(issueKey))
         {
             _logger.LogWarning("[Processor] {issueKey} already in-flight — skipping duplicate", issueKey);
             return;
         }
 
-        var title = root.GetNestedStringSafe("issue", "title") ?? string.Empty;
-        var body = root.GetNestedStringSafe("issue", "body") ?? string.Empty;
+        var title = webhook.IssueTitle ?? string.Empty;
+        var body = webhook.IssueBody ?? string.Empty;
 
         string prompt =
-            $@"Analyze Issue #{issueNum}: {title}
+            $@"Analyze Issue #{webhook.IssueNumber}: {title}
 
 {body}
 
 INSTRUCTIONS:
 1. Formulate a detailed implementation plan.
 2. Write it to an artifact file called 'implementation_plan.md' (ArtifactType=implementation_plan). This is mandatory.
-3. Answer with a GitHub comment for issue #{issueNum} summarising the plan.
+3. Answer with a GitHub comment for issue #{webhook.IssueNumber} summarising the plan.
 4. Ask for a 👍 reaction or 'approved' comment to proceed. Do NOT write any code yet.";
 
-        _logger.LogInformation("[Processor] Starting agent for issue #{issueNum}", issueNum);
+        _logger.LogInformation("[Processor] Starting agent for issue #{issueNum}", webhook.IssueNumber);
         var task = Task.Run(
             async () =>
             {
@@ -101,119 +94,118 @@ INSTRUCTIONS:
                     new()
                     {
                         RepoPath = localRepoPath,
-                        IssueNum = issueNum,
+                        IssueNum = webhook.IssueNumber,
                         Prompt = prompt,
                         Phase = AgentPhase.Planning,
                     },
                     cancellationToken
                 );
                 var comment = !string.IsNullOrEmpty(artifactOutput) ? artifactOutput : cleanResponse;
-                await _gitHubUtils.PostGitHubCommentAsync(localRepoPath, issueNum, comment, newSessionId, cancellationToken);
+                await _gitHubUtils.PostGitHubCommentAsync(localRepoPath, webhook.IssueNumber, comment, newSessionId, cancellationToken);
             },
             CancellationToken.None
         );
-        inFlightIssues[issueKey] = task;
+        _inFlightIssues[issueKey] = task;
         try
         {
             await task;
         }
         finally
         {
-            inFlightIssues.TryRemove(issueKey, out _);
+            _inFlightIssues.TryRemove(issueKey, out _);
             _logger.LogInformation("[Processor] {issueKey} processing complete", issueKey);
         }
     }
 
-    private async Task HandleReactionCreated(string repoName, JsonElement root, string cloneUrl, CancellationToken cancellationToken)
+    private async Task HandleReactionCreated(GitHubWebhook webhook, CancellationToken cancellationToken)
     {
-        var reactionContent = root.GetNestedStringSafe("reaction", "content") ?? string.Empty;
+        var reactionContent = webhook.ReactionContent;
         _logger.LogInformation("[Processor] Reaction event: content='{reactionContent}'", reactionContent);
         if (reactionContent == "+1" || reactionContent == "👍")
         {
-            var issueNum = root.GetNestedStringSafe("issue", "number");
-            if (string.IsNullOrEmpty(issueNum))
+            if (string.IsNullOrEmpty(webhook.IssueNumber))
             {
                 _logger.LogWarning($"[Processor] reaction event missing issue.number");
                 return;
             }
-            string localRepoPath = GitHubUtils.GetIssueRepoPath(repoName, issueNum);
-            await _gitHubUtils.EnsureRepoAsync(localRepoPath, cloneUrl, repoName, issueNum, cancellationToken);
-            string sid = await _gitHubUtils.GetSessionIdFromIssueAsync(localRepoPath, issueNum, cancellationToken);
+            string localRepoPath = GitHubUtils.GetIssueRepoPath(webhook.RepoName, webhook.IssueNumber);
+            await _gitHubUtils.EnsureRepoAsync(localRepoPath, webhook.CloneUrl, webhook.RepoName, webhook.IssueNumber, cancellationToken);
+            string sid = await _gitHubUtils.GetSessionIdFromIssueAsync(localRepoPath, webhook.IssueNumber, cancellationToken);
             if (!string.IsNullOrEmpty(sid))
-                await HandleApprovalAsync(localRepoPath, issueNum, sid, cancellationToken);
+                await HandleApprovalAsync(localRepoPath, webhook.IssueNumber, sid, cancellationToken);
             else
-                _logger.LogWarning("[Processor] 👍 on #{issueNum} but no active session found", issueNum);
+                _logger.LogWarning("[Processor] 👍 on #{issueNum} but no active session found", webhook.IssueNumber);
         }
     }
 
-    private async Task HandleIssueCommentCreated(string repoName, JsonElement root, string cloneUrl, CancellationToken cancellationToken)
+    private async Task HandleIssueCommentCreated(GitHubWebhook webhook, CancellationToken cancellationToken)
     {
-        var issueNum = root.GetNestedStringSafe("issue", "number");
-        var commentBody = root.GetNestedStringSafe("comment", "body");
-        if (string.IsNullOrEmpty(issueNum) || string.IsNullOrEmpty(commentBody))
+        if (string.IsNullOrEmpty(webhook.IssueNumber) || string.IsNullOrEmpty(webhook.CommentBody))
         {
             _logger.LogWarning($"[Processor] issue_comment missing issue.number or comment.body");
             return;
         }
 
-        if (GitHubUtils.IsOwnComment(commentBody))
+        if (GitHubUtils.IsOwnComment(webhook.CommentBody))
         {
             _logger.LogInformation($"[Processor] Skipping Bot comment to prevent loop");
             return;
         }
 
-        string localRepoPath = GitHubUtils.GetIssueRepoPath(repoName, issueNum);
-        await _gitHubUtils.EnsureRepoAsync(localRepoPath, cloneUrl, repoName, issueNum, cancellationToken);
+        string localRepoPath = GitHubUtils.GetIssueRepoPath(webhook.RepoName, webhook.IssueNumber);
+        await _gitHubUtils.EnsureRepoAsync(localRepoPath, webhook.CloneUrl, webhook.RepoName, webhook.IssueNumber, cancellationToken);
 
-        string activeSessionId = await _gitHubUtils.GetSessionIdFromIssueAsync(localRepoPath, issueNum, cancellationToken);
-        _logger.LogInformation("[Processor] issue_comment #{issueNum} activeSession='{activeSessionId}'", issueNum, activeSessionId);
+        string activeSessionId = await _gitHubUtils.GetSessionIdFromIssueAsync(localRepoPath, webhook.IssueNumber, cancellationToken);
+        _logger.LogInformation("[Processor] issue_comment #{issueNum} activeSession='{activeSessionId}'", webhook.IssueNumber, activeSessionId);
         if (string.IsNullOrEmpty(activeSessionId))
         {
-            _logger.LogWarning("[Processor] No active session for #{issueNum}", issueNum);
+            _logger.LogWarning("[Processor] No active session for #{issueNum}", webhook.IssueNumber);
             return;
         }
 
         bool isApproval =
-            commentBody.Trim() == "👍"
-            || commentBody.Trim().Equals("lgtm", StringComparison.OrdinalIgnoreCase)
-            || commentBody.Trim().Equals("approved", StringComparison.OrdinalIgnoreCase);
+            webhook.CommentBody.Trim() == "👍"
+            || webhook.CommentBody.Trim().Equals("lgtm", StringComparison.OrdinalIgnoreCase)
+            || webhook.CommentBody.Trim().Equals("approved", StringComparison.OrdinalIgnoreCase);
 
         if (isApproval)
         {
-            await HandleApprovalAsync(localRepoPath, issueNum, activeSessionId, cancellationToken);
+            await HandleApprovalAsync(localRepoPath, webhook.IssueNumber, activeSessionId, cancellationToken);
         }
         else
         {
             string execPrompt =
-                $"Feedback received on Issue #{issueNum}: '{commentBody}'. Update the plan accordingly. Post an updated plan artifact and ask for another 👍 to proceed.";
-            _logger.LogInformation("[Processor] Feedback on #{issueNum}: '{CommentBody}'", issueNum, commentBody[..Math.Min(80, commentBody.Length)]);
+                $"Feedback received on Issue #{webhook.IssueNumber}: '{webhook.CommentBody}'. Update the plan accordingly. Post an updated plan artifact and ask for another 👍 to proceed.";
+            _logger.LogInformation(
+                "[Processor] Feedback on #{issueNum}: '{CommentBody}'",
+                webhook.IssueNumber,
+                webhook.CommentBody[..Math.Min(80, webhook.CommentBody.Length)]
+            );
             var response = await _agentChat.GetResponseAsync(
                 new()
                 {
                     RepoPath = localRepoPath,
-                    IssueNum = issueNum,
+                    IssueNum = webhook.IssueNumber,
                     Prompt = execPrompt,
                     Phase = AgentPhase.Planning,
                 },
                 cancellationToken
             );
             var comment = !string.IsNullOrEmpty(response.ArtifactOutput) ? response.ArtifactOutput : response.Output;
-            await _gitHubUtils.PostGitHubCommentAsync(localRepoPath, issueNum, comment, activeSessionId, cancellationToken);
+            await _gitHubUtils.PostGitHubCommentAsync(localRepoPath, webhook.IssueNumber, comment, activeSessionId, cancellationToken);
         }
     }
 
-    private void HandlePullRequestClosed(string repoName, JsonElement root)
+    private void HandlePullRequestClosed(GitHubWebhook webhook)
     {
-        bool merged = root.TryGetProperty("pull_request", out var pr) && pr.TryGetProperty("merged", out var m) && m.GetBoolean();
-        if (merged)
+        if (webhook.PrMerged)
         {
-            string headRef = root.GetNestedStringSafe("pull_request", "head", "ref") ?? string.Empty;
-            _logger.LogInformation("[Processor] PR merged head_ref='{headRef}'", headRef);
-            var issueMatch = IssueRegex.Match(headRef);
+            _logger.LogInformation("[Processor] PR merged head_ref='{headRef}'", webhook.HeadRef);
+            var issueMatch = IssueRegex.Match(webhook.HeadRef ?? string.Empty);
             if (issueMatch.Success)
             {
                 string issueNum = issueMatch.Groups[1].Value;
-                string path = GitHubUtils.GetIssueRepoPath(repoName, issueNum);
+                string path = GitHubUtils.GetIssueRepoPath(webhook.RepoName, issueNum);
                 if (Directory.Exists(path))
                 {
                     _logger.LogInformation("[Processor] Deleting isolated clone for issue #{issueNum}: '{path}'", issueNum, path);
