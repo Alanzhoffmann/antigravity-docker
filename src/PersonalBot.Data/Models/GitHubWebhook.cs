@@ -7,6 +7,8 @@ public class GitHubWebhook
 {
     public required string EventType { get; set; }
     public required string DeliveryId { get; set; }
+    public DateTime CreatedAt { get; } = DateTime.UtcNow;
+    public bool IsProcessed { get; set; }
     public required string RawBody
     {
         get;

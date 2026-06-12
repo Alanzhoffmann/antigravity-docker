@@ -13,6 +13,7 @@ public static class ServiceCollectionExtensions
         services.AddDbContext<BotDbContext>();
         services.AddDataBackgroundServices<BotDbContext>();
         services.AddScoped<ITaskService, TaskService>();
+        services.AddScoped<IWebhookService, WebhookService>();
 
         return services;
     }

@@ -1,6 +1,6 @@
 using System.Text.Json;
+using PersonalBot.Data.Interfaces;
 using PersonalBot.Utils;
-using PersonalBot.Workers;
 
 namespace PersonalBot.Api.Endpoints;
 
@@ -16,7 +16,7 @@ public static class GithubHookEndpoint
 
         app.MapPost(
             "/github-webhook",
-            async (WebhookProcessor webhookProcessor, HttpContext context) =>
+            async (IWebhookService webhookService, HttpContext context, CancellationToken cancellationToken) =>
             {
                 var eventType = context.Request.Headers["X-GitHub-Event"].ToString();
                 var deliveryId = context.Request.Headers["X-GitHub-Delivery"].ToString();
@@ -28,7 +28,7 @@ public static class GithubHookEndpoint
                 try
                 {
                     using var reader = new StreamReader(context.Request.Body);
-                    rawBody = await reader.ReadToEndAsync();
+                    rawBody = await reader.ReadToEndAsync(cancellationToken);
                 }
                 catch (Exception ex)
                 {
@@ -55,26 +55,23 @@ public static class GithubHookEndpoint
                     return Results.Ok(new { status = "Ignored: unsupported repository" });
                 }
 
-                // Fire-and-forget — GitHub gets 202 in milliseconds, no timeout risk.
-                _ = Task.Run(async () =>
+                try
                 {
-                    try
-                    {
-                        await webhookProcessor.ProcessWebhookAsync(
-                            new()
-                            {
-                                EventType = eventType,
-                                DeliveryId = deliveryId,
-                                RawBody = rawBody,
-                                RepoName = repoName,
-                            }
-                        );
-                    }
-                    catch (Exception ex)
-                    {
-                        logger.LogError(ex, "Unhandled exception: {Message}\n{StackTrace}", ex.Message, ex.StackTrace);
-                    }
-                });
+                    await webhookService.AddNewAsync(
+                        new()
+                        {
+                            EventType = eventType,
+                            DeliveryId = deliveryId,
+                            RawBody = rawBody,
+                            RepoName = repoName,
+                        },
+                        cancellationToken
+                    );
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "Unhandled exception: {Message}\n{StackTrace}", ex.Message, ex.StackTrace);
+                }
 
                 return Results.Accepted(value: new { status = "Accepted", delivery = deliveryId });
             }

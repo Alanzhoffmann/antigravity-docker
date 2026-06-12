@@ -21,7 +21,7 @@ internal class WebhookBackgroundService : BackgroundService
 
             await webhookProcessor.ProcessNextAsync(stoppingToken);
 
-            await Task.Delay(TimeSpan.FromMinutes(5), stoppingToken);
+            await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken);
         }
     }
 }

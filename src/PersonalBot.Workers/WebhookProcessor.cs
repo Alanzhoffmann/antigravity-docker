@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using PersonalBot.Chats.Interfaces;
+using PersonalBot.Data.Interfaces;
 using PersonalBot.Data.Models;
 using PersonalBot.Data.Models.Enums;
 using PersonalBot.Utils;
@@ -11,6 +12,7 @@ namespace PersonalBot.Workers;
 public partial class WebhookProcessor
 {
     private readonly ILogger<WebhookProcessor> _logger;
+    private readonly IWebhookService _webhookService;
     private readonly GitHubUtils _gitHubUtils;
     private readonly IAgentChat _agentChat;
 
@@ -19,21 +21,27 @@ public partial class WebhookProcessor
 
     public WebhookProcessor(
         ILogger<WebhookProcessor> logger,
+        IWebhookService webhookService,
         IChatResolver chatResolver,
         GitHubUtils gitHubUtils
     )
     {
         _logger = logger;
+        _webhookService = webhookService;
         _gitHubUtils = gitHubUtils;
         _agentChat = chatResolver.ResolveCurrent();
     }
 
     internal async ValueTask ProcessNextAsync(CancellationToken cancellationToken = default)
     {
-        // TODO get next webhook
+        var nextWebhook = await _webhookService.GetNextAsync(cancellationToken);
+        if (nextWebhook is not null)
+        {
+            await ProcessWebhookAsync(nextWebhook, cancellationToken);
+        }
     }
 
-    public async ValueTask ProcessWebhookAsync(
+    private async ValueTask ProcessWebhookAsync(
         GitHubWebhook webhook,
         CancellationToken cancellationToken = default
     )
