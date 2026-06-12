@@ -13,4 +13,5 @@ services:
       
       # Persist the GitHub workspaces
       - ${DOCKER_DIR}/config/antigravity-bot/workspaces:/app/workspaces
+      - ${DOCKER_DIR}/config/antigravity-bot:/config
     restart: unless-stopped

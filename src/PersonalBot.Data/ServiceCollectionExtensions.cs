@@ -11,7 +11,7 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddDatabase(this IServiceCollection services)
     {
         services.AddDbContext<BotDbContext>(options =>
-            options.UseSqlite("Data Source=/app/app.db;Cache=Shared")
+            options.UseSqlite("Data Source=/config/app.db;Cache=Shared")
         );
         services.AddDataBackgroundServices<BotDbContext>();
         services.AddScoped<ITaskService, TaskService>();
