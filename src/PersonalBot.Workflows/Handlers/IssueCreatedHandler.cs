@@ -1,0 +1,90 @@
+using Mediator;
+using Microsoft.Extensions.Logging;
+using PersonalBot.Chats.Interfaces;
+using PersonalBot.Data.Models.Enums;
+using PersonalBot.Data.Models.Workflows;
+using PersonalBot.Utils;
+
+namespace PersonalBot.Workflows.Handlers;
+
+public class IssueCreatedHandler : INotificationHandler<IssueOpened>
+{
+    private readonly GitHubUtils _gitHubUtils;
+    private readonly IChatResolver _chatResolver;
+    private readonly ILogger<IssueCreatedHandler> _logger;
+
+    public IssueCreatedHandler(
+        GitHubUtils gitHubUtils,
+        IChatResolver chatResolver,
+        ILogger<IssueCreatedHandler> logger
+    )
+    {
+        _gitHubUtils = gitHubUtils;
+        _chatResolver = chatResolver;
+        _logger = logger;
+    }
+
+    public async ValueTask Handle(IssueOpened notification, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrEmpty(notification.IssueNumber))
+        {
+            _logger.LogWarning($"issues/opened missing issue.number");
+            return;
+        }
+
+        // Each issue gets its own isolated clone so branches and commits never bleed across issues
+        string localRepoPath = GitHubUtils.GetIssueRepoPath(
+            notification.RepoName,
+            notification.IssueNumber
+        );
+        await _gitHubUtils.EnsureRepoAsync(
+            localRepoPath,
+            notification.CloneUrl,
+            notification.RepoName,
+            notification.IssueNumber,
+            cancellationToken
+        );
+
+        string issueKey = $"{notification.RepoName}#{notification.IssueNumber}";
+
+        var title = notification.IssueTitle ?? string.Empty;
+        var body = notification.IssueBody ?? string.Empty;
+
+        string prompt =
+            $@"Analyze Issue #{notification.IssueNumber}: {title}
+
+{body}
+
+INSTRUCTIONS:
+1. Formulate a detailed implementation plan.
+2. Write it to an artifact file called 'implementation_plan.md' (ArtifactType=implementation_plan). This is mandatory.
+3. Answer with a GitHub comment for issue #{notification.IssueNumber} summarising the plan.
+4. Ask for a 👍 reaction or 'approved' comment to proceed. Do NOT write any code yet.";
+
+        _logger.LogInformation("Starting agent for issue #{issueNum}", notification.IssueNumber);
+        var agentChat = _chatResolver.ResolveCurrent();
+        (string cleanResponse, string newSessionId, string? artifactOutput) =
+            await agentChat.GetResponseAsync(
+                new()
+                {
+                    RepoPath = localRepoPath,
+                    IssueNum = notification.IssueNumber,
+                    Prompt = prompt,
+                    Phase = AgentPhase.Planning,
+                },
+                cancellationToken
+            );
+
+        var comment = !string.IsNullOrEmpty(artifactOutput) ? artifactOutput : cleanResponse;
+
+        await _gitHubUtils.PostGitHubCommentAsync(
+            localRepoPath,
+            notification.IssueNumber,
+            comment,
+            newSessionId,
+            cancellationToken
+        );
+
+        _logger.LogInformation("{issueKey} processing complete", issueKey);
+    }
+}

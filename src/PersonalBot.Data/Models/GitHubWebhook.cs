@@ -1,4 +1,5 @@
 using System.Text.Json;
+using PersonalBot.Data.Models.Enums;
 using PersonalBot.Utils;
 
 namespace PersonalBot.Data.Models;

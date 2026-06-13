@@ -1,9 +1,11 @@
 using System.Text.RegularExpressions;
+using Mediator;
 using Microsoft.Extensions.Logging;
 using PersonalBot.Chats.Interfaces;
 using PersonalBot.Data.Interfaces;
 using PersonalBot.Data.Models;
 using PersonalBot.Data.Models.Enums;
+using PersonalBot.Data.Models.Workflows;
 using PersonalBot.Utils;
 
 namespace PersonalBot.Workers;
@@ -13,18 +15,21 @@ public partial class WebhookProcessor
     private readonly ILogger<WebhookProcessor> _logger;
     private readonly IWebhookService _webhookService;
     private readonly GitHubUtils _gitHubUtils;
+    private readonly IPublisher _publisher;
     private readonly IChatResolver _chatResolver;
 
     public WebhookProcessor(
         ILogger<WebhookProcessor> logger,
         IWebhookService webhookService,
         IChatResolver chatResolver,
-        GitHubUtils gitHubUtils
+        GitHubUtils gitHubUtils,
+        IPublisher publisher
     )
     {
         _logger = logger;
         _webhookService = webhookService;
         _gitHubUtils = gitHubUtils;
+        _publisher = publisher;
         _chatResolver = chatResolver;
     }
 
@@ -45,7 +50,7 @@ public partial class WebhookProcessor
             switch (webhook)
             {
                 case { EventType: "issues", Action: "opened" }:
-                    await HandleIssueOpened(webhook, cancellationToken);
+                    await _publisher.Publish(new IssueOpened(webhook), cancellationToken);
                     break;
                 case { EventType: "reaction", Action: "created" }:
                     await HandleReactionCreated(webhook, cancellationToken);
@@ -75,70 +80,6 @@ public partial class WebhookProcessor
         {
             await _webhookService.CommitAsync(cancellationToken);
         }
-    }
-
-    private async Task HandleIssueOpened(GitHubWebhook webhook, CancellationToken cancellationToken)
-    {
-        if (string.IsNullOrEmpty(webhook.IssueNumber))
-        {
-            _logger.LogWarning($"issues/opened missing issue.number");
-            return;
-        }
-
-        // Each issue gets its own isolated clone so branches and commits never bleed across issues
-        string localRepoPath = GitHubUtils.GetIssueRepoPath(webhook.RepoName, webhook.IssueNumber);
-        await _gitHubUtils.EnsureRepoAsync(
-            localRepoPath,
-            webhook.CloneUrl,
-            webhook.RepoName,
-            webhook.IssueNumber,
-            cancellationToken
-        );
-
-        string issueKey = $"{webhook.RepoName}#{webhook.IssueNumber}";
-
-        var title = webhook.IssueTitle ?? string.Empty;
-        var body = webhook.IssueBody ?? string.Empty;
-
-        string prompt =
-            $@"Analyze Issue #{webhook.IssueNumber}: {title}
-
-{body}
-
-INSTRUCTIONS:
-1. Formulate a detailed implementation plan.
-2. Write it to an artifact file called 'implementation_plan.md' (ArtifactType=implementation_plan). This is mandatory.
-3. Answer with a GitHub comment for issue #{webhook.IssueNumber} summarising the plan.
-4. Ask for a 👍 reaction or 'approved' comment to proceed. Do NOT write any code yet.";
-
-        _logger.LogInformation(
-            "[Processor] Starting agent for issue #{issueNum}",
-            webhook.IssueNumber
-        );
-        var agentChat = _chatResolver.ResolveCurrent();
-        (string cleanResponse, string newSessionId, string? artifactOutput) =
-            await agentChat.GetResponseAsync(
-                new()
-                {
-                    RepoPath = localRepoPath,
-                    IssueNum = webhook.IssueNumber,
-                    Prompt = prompt,
-                    Phase = AgentPhase.Planning,
-                },
-                cancellationToken
-            );
-
-        var comment = !string.IsNullOrEmpty(artifactOutput) ? artifactOutput : cleanResponse;
-
-        await _gitHubUtils.PostGitHubCommentAsync(
-            localRepoPath,
-            webhook.IssueNumber,
-            comment,
-            newSessionId,
-            cancellationToken
-        );
-
-        _logger.LogInformation("[Processor] {issueKey} processing complete", issueKey);
     }
 
     private async Task HandleReactionCreated(

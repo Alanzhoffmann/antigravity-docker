@@ -1,4 +1,4 @@
-namespace PersonalBot.Data.Models;
+namespace PersonalBot.Data.Models.Enums;
 
 public enum WebhookStatus
 {
