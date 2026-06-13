@@ -26,7 +26,7 @@ public class ChatRunner
     public async Task RunNextAsync(CancellationToken cancellationToken = default)
     {
         var currentChat = _chatResolver.ResolveCurrent();
-        var nextTask = await _taskService.GetNextPendingTaskAsync(cancellationToken);
+        var nextTask = await _taskService.GetNextPendingAsync(cancellationToken);
 
         if (nextTask is null)
         {
@@ -78,7 +78,9 @@ public class ChatRunner
                 nextTask.Status = AiTaskStatus.Pending; // Send back to queue
             }
         }
-
-        await _taskService.CommitAsync(cancellationToken);
+        finally
+        {
+            await _taskService.CommitAsync(cancellationToken);
+        }
     }
 }

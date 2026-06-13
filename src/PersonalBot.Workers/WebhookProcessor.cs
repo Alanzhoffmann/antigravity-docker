@@ -16,9 +16,6 @@ public partial class WebhookProcessor
     private readonly GitHubUtils _gitHubUtils;
     private readonly IAgentChat _agentChat;
 
-    // Deduplicate in-flight issue processing tasks
-    readonly ConcurrentDictionary<string, Task> _inFlightIssues = new();
-
     public WebhookProcessor(
         ILogger<WebhookProcessor> logger,
         IWebhookService webhookService,
@@ -100,14 +97,6 @@ public partial class WebhookProcessor
         );
 
         string issueKey = $"{webhook.RepoName}#{webhook.IssueNumber}";
-        if (_inFlightIssues.ContainsKey(issueKey))
-        {
-            _logger.LogWarning(
-                "[Processor] {issueKey} already in-flight — skipping duplicate",
-                issueKey
-            );
-            return;
-        }
 
         var title = webhook.IssueTitle ?? string.Empty;
         var body = webhook.IssueBody ?? string.Empty;
@@ -127,43 +116,29 @@ INSTRUCTIONS:
             "[Processor] Starting agent for issue #{issueNum}",
             webhook.IssueNumber
         );
-        var task = Task.Run(
-            async () =>
-            {
-                (string cleanResponse, string newSessionId, string? artifactOutput) =
-                    await _agentChat.GetResponseAsync(
-                        new()
-                        {
-                            RepoPath = localRepoPath,
-                            IssueNum = webhook.IssueNumber,
-                            Prompt = prompt,
-                            Phase = AgentPhase.Planning,
-                        },
-                        cancellationToken
-                    );
-                var comment = !string.IsNullOrEmpty(artifactOutput)
-                    ? artifactOutput
-                    : cleanResponse;
-                await _gitHubUtils.PostGitHubCommentAsync(
-                    localRepoPath,
-                    webhook.IssueNumber,
-                    comment,
-                    newSessionId,
-                    cancellationToken
-                );
-            },
-            CancellationToken.None
+        (string cleanResponse, string newSessionId, string? artifactOutput) =
+            await _agentChat.GetResponseAsync(
+                new()
+                {
+                    RepoPath = localRepoPath,
+                    IssueNum = webhook.IssueNumber,
+                    Prompt = prompt,
+                    Phase = AgentPhase.Planning,
+                },
+                cancellationToken
+            );
+
+        var comment = !string.IsNullOrEmpty(artifactOutput) ? artifactOutput : cleanResponse;
+
+        await _gitHubUtils.PostGitHubCommentAsync(
+            localRepoPath,
+            webhook.IssueNumber,
+            comment,
+            newSessionId,
+            cancellationToken
         );
-        _inFlightIssues[issueKey] = task;
-        try
-        {
-            await task;
-        }
-        finally
-        {
-            _inFlightIssues.TryRemove(issueKey, out _);
-            _logger.LogInformation("[Processor] {issueKey} processing complete", issueKey);
-        }
+
+        _logger.LogInformation("[Processor] {issueKey} processing complete", issueKey);
     }
 
     private async Task HandleReactionCreated(

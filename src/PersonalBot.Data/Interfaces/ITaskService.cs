@@ -4,7 +4,7 @@ namespace PersonalBot.Data.Interfaces;
 
 public interface ITaskService
 {
-    Task<AiTask?> GetNextPendingTaskAsync(CancellationToken cancellationToken = default);
-    void AddNewTask(AiTask aiTask);
-    Task CommitAsync(CancellationToken cancellationToken = default);
+    ValueTask<AiTask?> GetNextPendingAsync(CancellationToken cancellationToken = default);
+    void AddNew(AiTask aiTask);
+    ValueTask CommitAsync(CancellationToken cancellationToken = default);
 }

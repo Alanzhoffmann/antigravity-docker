@@ -8,31 +8,35 @@ namespace PersonalBot.Data.Internal;
 public class TaskService : ITaskService
 {
     private readonly BotDbContext _dbContext;
-    private readonly MigrationState<BotDbContext> _migrationState;
 
-    public TaskService(BotDbContext dbContext, MigrationState<BotDbContext> migrationState)
+    public TaskService(BotDbContext dbContext)
     {
         _dbContext = dbContext;
-        _migrationState = migrationState;
     }
 
-    public async Task<AiTask?> GetNextPendingTaskAsync(
+    public async ValueTask<AiTask?> GetNextPendingAsync(
         CancellationToken cancellationToken = default
     )
     {
-        if (!_migrationState.IsDone)
+        if (!_dbContext.MigrationState.IsDone)
         {
             return null;
         }
 
         return await _dbContext
-            .AiTasks.Where(t => t.Status == AiTaskStatus.Pending)
-            .OrderBy(t => t.CreatedAt)
-            .FirstOrDefaultAsync(cancellationToken);
+            .AiTasks.OrderBy(t => t.CreatedAt)
+            .FirstOrDefaultAsync(t => t.Status == AiTaskStatus.Pending, cancellationToken);
     }
 
-    public void AddNewTask(AiTask aiTask) => _dbContext.Add(aiTask);
+    public async void AddNew(AiTask aiTask) => _dbContext.Add(aiTask);
 
-    public async Task CommitAsync(CancellationToken cancellationToken = default) =>
+    public async ValueTask CommitAsync(CancellationToken cancellationToken = default)
+    {
+        if (!_dbContext.MigrationState.IsDone)
+        {
+            return;
+        }
+
         await _dbContext.SaveChangesAsync(cancellationToken);
+    }
 }
