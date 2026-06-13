@@ -1,0 +1,4 @@
+{
+  "project": "src/PersonalBot.Data",
+  "startupProject": "src/PersonalBot.Api"
+}
