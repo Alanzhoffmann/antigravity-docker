@@ -24,10 +24,7 @@ public class GitHubWebhook
             IssueBody = document.RootElement.GetNestedStringSafe("issue", "body");
             ReactionContent = document.RootElement.GetNestedStringSafe("reaction", "content");
             CommentBody = document.RootElement.GetNestedStringSafe("comment", "body");
-            PrMerged =
-                document.RootElement.TryGetProperty("pull_request", out var pr)
-                && pr.TryGetProperty("merged", out var m)
-                && m.GetBoolean();
+            PrMerged = document.RootElement.TryGetProperty("pull_request", out var pr) && pr.TryGetProperty("merged", out var m) && m.GetBoolean();
             HeadRef = document.RootElement.GetNestedStringSafe("pull_request", "head", "ref");
         }
     }
@@ -42,6 +39,5 @@ public class GitHubWebhook
     public bool PrMerged { get; private set; }
     public string? HeadRef { get; private set; }
 
-    public override string ToString() =>
-        $"event='{EventType}' action='{Action}' delivery='{DeliveryId}' repo='{RepoName}'";
+    public override string ToString() => $"event='{EventType}' action='{Action}' delivery='{DeliveryId}' repo='{RepoName}'";
 }

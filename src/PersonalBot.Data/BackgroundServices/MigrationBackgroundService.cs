@@ -14,11 +14,7 @@ public class MigrationBackgroundService<T> : BackgroundService
 
     private readonly MigrationState<T> _migrationState;
 
-    public MigrationBackgroundService(
-        IServiceScopeFactory serviceScopeFactory,
-        ILogger<MigrationBackgroundService<T>> logger,
-        MigrationState<T> migrationState
-    )
+    public MigrationBackgroundService(IServiceScopeFactory serviceScopeFactory, ILogger<MigrationBackgroundService<T>> logger, MigrationState<T> migrationState)
     {
         _serviceScopeFactory = serviceScopeFactory;
         _logger = logger;
@@ -46,24 +42,12 @@ public class MigrationBackgroundService<T> : BackgroundService
 
 internal static partial class MigrationLoggerExtensions
 {
-    [LoggerMessage(
-        EventId = 0,
-        Level = LogLevel.Information,
-        Message = "Waiting for database migrations to complete..."
-    )]
+    [LoggerMessage(EventId = 0, Level = LogLevel.Information, Message = "Waiting for database migrations to complete...")]
     public static partial void LogWaitingForMigrations(this ILogger logger);
 
-    [LoggerMessage(
-        EventId = 1,
-        Level = LogLevel.Information,
-        Message = "Database migrations completed successfully."
-    )]
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Database migrations completed successfully.")]
     public static partial void LogMigrationsCompleted(this ILogger logger);
 
-    [LoggerMessage(
-        EventId = 2,
-        Level = LogLevel.Critical,
-        Message = "Failed to apply database migrations."
-    )]
+    [LoggerMessage(EventId = 2, Level = LogLevel.Critical, Message = "Failed to apply database migrations.")]
     public static partial void LogMigrationError(this ILogger logger, Exception ex);
 }

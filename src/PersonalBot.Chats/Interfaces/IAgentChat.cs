@@ -19,18 +19,9 @@ internal class NullChat : IAgentChat
 
     public string AgentName => nameof(NullChat);
 
-    public Task<ChatResult> GetResponseAsync(
-        AiTask aiTask,
-        CancellationToken cancellationToken = default
-    )
+    public Task<ChatResult> GetResponseAsync(AiTask aiTask, CancellationToken cancellationToken = default)
     {
         // TODO throw when retries are implemented
-        return Task.FromResult(
-            new ChatResult(
-                "No agent chat implementations are enabled. Please check the configuration.",
-                aiTask.IssueNum,
-                null
-            )
-        );
+        return Task.FromResult(new ChatResult("No agent chat implementations are enabled. Please check the configuration.", aiTask.IssueNum, null));
     }
 }

@@ -8,10 +8,7 @@ public class RepositoryToolsFactory
     private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<RepositoryToolsFactory> _logger;
 
-    public RepositoryToolsFactory(
-        IServiceProvider serviceProvider,
-        ILogger<RepositoryToolsFactory> logger
-    )
+    public RepositoryToolsFactory(IServiceProvider serviceProvider, ILogger<RepositoryToolsFactory> logger)
     {
         _serviceProvider = serviceProvider;
         _logger = logger;

@@ -13,11 +13,7 @@ public class IssueCreatedHandler : INotificationHandler<IssueOpened>
     private readonly IChatResolver _chatResolver;
     private readonly ILogger<IssueCreatedHandler> _logger;
 
-    public IssueCreatedHandler(
-        GitHubUtils gitHubUtils,
-        IChatResolver chatResolver,
-        ILogger<IssueCreatedHandler> logger
-    )
+    public IssueCreatedHandler(GitHubUtils gitHubUtils, IChatResolver chatResolver, ILogger<IssueCreatedHandler> logger)
     {
         _gitHubUtils = gitHubUtils;
         _chatResolver = chatResolver;
@@ -33,17 +29,8 @@ public class IssueCreatedHandler : INotificationHandler<IssueOpened>
         }
 
         // Each issue gets its own isolated clone so branches and commits never bleed across issues
-        string localRepoPath = GitHubUtils.GetIssueRepoPath(
-            notification.RepoName,
-            notification.IssueNumber
-        );
-        await _gitHubUtils.EnsureRepoAsync(
-            localRepoPath,
-            notification.CloneUrl,
-            notification.RepoName,
-            notification.IssueNumber,
-            cancellationToken
-        );
+        string localRepoPath = GitHubUtils.GetIssueRepoPath(notification.RepoName, notification.IssueNumber);
+        await _gitHubUtils.EnsureRepoAsync(localRepoPath, notification.CloneUrl, notification.RepoName, notification.IssueNumber, cancellationToken);
 
         string issueKey = $"{notification.RepoName}#{notification.IssueNumber}";
 
@@ -63,27 +50,20 @@ INSTRUCTIONS:
 
         _logger.LogInformation("Starting agent for issue #{issueNum}", notification.IssueNumber);
         var agentChat = _chatResolver.ResolveCurrent();
-        (string cleanResponse, string newSessionId, string? artifactOutput) =
-            await agentChat.GetResponseAsync(
-                new()
-                {
-                    RepoPath = localRepoPath,
-                    IssueNum = notification.IssueNumber,
-                    Prompt = prompt,
-                    Phase = AgentPhase.Planning,
-                },
-                cancellationToken
-            );
+        (string cleanResponse, string newSessionId, string? artifactOutput) = await agentChat.GetResponseAsync(
+            new()
+            {
+                RepoPath = localRepoPath,
+                IssueNum = notification.IssueNumber,
+                Prompt = prompt,
+                Phase = AgentPhase.Planning,
+            },
+            cancellationToken
+        );
 
         var comment = !string.IsNullOrEmpty(artifactOutput) ? artifactOutput : cleanResponse;
 
-        await _gitHubUtils.PostGitHubCommentAsync(
-            localRepoPath,
-            notification.IssueNumber,
-            comment,
-            newSessionId,
-            cancellationToken
-        );
+        await _gitHubUtils.PostGitHubCommentAsync(localRepoPath, notification.IssueNumber, comment, newSessionId, cancellationToken);
 
         _logger.LogInformation("{issueKey} processing complete", issueKey);
     }

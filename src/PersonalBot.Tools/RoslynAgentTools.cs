@@ -30,19 +30,12 @@ public class RoslynAgentTools : IDisposable
     public Solution CurrentSolution
     {
         get =>
-            _currentSolution
-            ?? throw new InvalidOperationException(
-                "No solution or project loaded. Please call LoadSolutionAsync or LoadProjectAsync first."
-            );
+            _currentSolution ?? throw new InvalidOperationException("No solution or project loaded. Please call LoadSolutionAsync or LoadProjectAsync first.");
         private set => _currentSolution = value;
     }
 
     public IList<AITool> ReadOnlyTools =>
-        [
-            AIFunctionFactory.Create(FindReferences),
-            AIFunctionFactory.Create(ReadMethodCode),
-            AIFunctionFactory.Create(ListProjects),
-        ];
+        [AIFunctionFactory.Create(FindReferences), AIFunctionFactory.Create(ReadMethodCode), AIFunctionFactory.Create(ListProjects)];
 
     public IList<AITool> Tools => [.. ReadOnlyTools, AIFunctionFactory.Create(ReplaceMethodCode)];
 
@@ -67,12 +60,8 @@ public class RoslynAgentTools : IDisposable
         return Task.FromResult(string.Join("\n", projectNames));
     }
 
-    [Description(
-        "Finds all references to a specific class, method, or property name across all projects in the solution."
-    )]
-    public async Task<string> FindReferences(
-        [Description("The exact name of the symbol to find")] string symbolName
-    )
+    [Description("Finds all references to a specific class, method, or property name across all projects in the solution.")]
+    public async Task<string> FindReferences([Description("The exact name of the symbol to find")] string symbolName)
     {
         _logger.LogInformation("Finding references for {SymbolName}", symbolName);
 
@@ -97,10 +86,7 @@ public class RoslynAgentTools : IDisposable
             return $"Symbol '{symbolName}' not found in any project.";
 
         // 2. Search the entire solution for references to this symbol
-        var references = await Microsoft.CodeAnalysis.FindSymbols.SymbolFinder.FindReferencesAsync(
-            targetSymbol,
-            CurrentSolution
-        );
+        var references = await Microsoft.CodeAnalysis.FindSymbols.SymbolFinder.FindReferencesAsync(targetSymbol, CurrentSolution);
 
         var output = new List<string>();
         foreach (var reference in references)
@@ -118,9 +104,7 @@ public class RoslynAgentTools : IDisposable
     // Helper to find a file anywhere in the solution
     private Document? FindDocument(string fileName)
     {
-        return CurrentSolution
-            .Projects.SelectMany(p => p.Documents)
-            .FirstOrDefault(d => d.Name.EndsWith(fileName, StringComparison.OrdinalIgnoreCase));
+        return CurrentSolution.Projects.SelectMany(p => p.Documents).FirstOrDefault(d => d.Name.EndsWith(fileName, StringComparison.OrdinalIgnoreCase));
     }
 
     [Description("Gets the source code of a specific method inside a specific file.")]
@@ -205,9 +189,7 @@ public class RoslynAgentTools : IDisposable
             {
                 // This unloads the solution and releases all memory/file locks
                 _workspace?.Dispose();
-                _logger.LogInformation(
-                    "MSBuildWorkspace successfully disposed and solution unloaded."
-                );
+                _logger.LogInformation("MSBuildWorkspace successfully disposed and solution unloaded.");
             }
             _disposed = true;
         }

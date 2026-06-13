@@ -11,27 +11,19 @@ public class RepositoryTools
     private readonly ILogger<RepositoryTools> _logger;
     private readonly ProcessUtils _processUtils;
 
-    public RepositoryTools(
-        string repoPath,
-        ILogger<RepositoryTools> logger,
-        ProcessUtils processUtils
-    )
+    public RepositoryTools(string repoPath, ILogger<RepositoryTools> logger, ProcessUtils processUtils)
     {
         _repoPath = repoPath;
         _logger = logger;
         _processUtils = processUtils;
     }
 
-    public IList<AITool> ReadOnlyTools =>
-        [AIFunctionFactory.Create(RunBashCommand), AIFunctionFactory.Create(ReadFile)];
+    public IList<AITool> ReadOnlyTools => [AIFunctionFactory.Create(RunBashCommand), AIFunctionFactory.Create(ReadFile)];
 
     public IList<AITool> Tools => [.. ReadOnlyTools, AIFunctionFactory.Create(WriteFile)];
 
     [Description("Reads the contents of a specific file in the repository.")]
-    public async Task<string> ReadFile(
-        [Description("The relative path to the file, e.g., 'src/Program.cs'")]
-            string relativeFilePath
-    )
+    public async Task<string> ReadFile([Description("The relative path to the file, e.g., 'src/Program.cs'")] string relativeFilePath)
     {
         string fullPath = Path.Combine(_repoPath, relativeFilePath);
 
@@ -64,22 +56,12 @@ public class RepositoryTools
         "Executes a raw bash command in the repository workspace. Supports pipes (|), redirects (>), and standard Linux utilities like ls, grep, find, and git."
     )]
     public async Task<string> RunBashCommand(
-        [Description(
-            "The full bash command to execute, e.g., 'ls -la' or 'git log --oneline | grep fix'"
-        )]
-            string command,
+        [Description("The full bash command to execute, e.g., 'ls -la' or 'git log --oneline | grep fix'")] string command,
         CancellationToken cancellationToken = default
     )
     {
-        var response = await _processUtils.RunProcessAsync(
-            "/bin/bash",
-            ["-c", command],
-            _repoPath,
-            cancellationToken: cancellationToken
-        );
+        var response = await _processUtils.RunProcessAsync("/bin/bash", ["-c", command], _repoPath, cancellationToken: cancellationToken);
 
-        return string.IsNullOrWhiteSpace(response)
-            ? "Command executed successfully (no output)."
-            : response;
+        return string.IsNullOrWhiteSpace(response) ? "Command executed successfully (no output)." : response;
     }
 }

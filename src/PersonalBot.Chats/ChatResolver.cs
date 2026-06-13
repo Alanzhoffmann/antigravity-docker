@@ -16,14 +16,9 @@ public class ChatResolver : IChatResolver
 
     public IAgentChat ResolveCurrent()
     {
-        var agent =
-            _agents.FirstOrDefault(x => x.IsEnabled)
-            ?? throw new InvalidOperationException("No enabled IAgentChat implementations found");
+        var agent = _agents.FirstOrDefault(x => x.IsEnabled) ?? throw new InvalidOperationException("No enabled IAgentChat implementations found");
 
-        _logger.LogInformation(
-            "Using IAgentChat implementation: {AgentName}",
-            agent.GetType().Name
-        );
+        _logger.LogInformation("Using IAgentChat implementation: {AgentName}", agent.GetType().Name);
 
         return agent;
     }

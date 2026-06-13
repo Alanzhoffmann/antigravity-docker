@@ -35,27 +35,17 @@ internal partial class AgyChat : IAgentChat
         _processUtils = processUtils;
     }
 
-    public bool IsEnabled =>
-        _optionsMonitor.CurrentValue.IsEnabled
-        && (_lastExhaustedTokenTime - _timeProvider.GetUtcNow()).TotalSeconds > 600;
+    public bool IsEnabled => _optionsMonitor.CurrentValue.IsEnabled && (_lastExhaustedTokenTime - _timeProvider.GetUtcNow()).TotalSeconds > 600;
 
     public string AgentName => nameof(AgyChat);
 
-    public async Task<ChatResult> GetResponseAsync(
-        AiTask aiTask,
-        CancellationToken cancellationToken = default
-    )
+    public async Task<ChatResult> GetResponseAsync(AiTask aiTask, CancellationToken cancellationToken = default)
     {
-        (string agentOutput, string? log) = await ExecuteAgyHeadless(
-            aiTask.RepoPath,
-            aiTask.Prompt,
-            cancellationToken: cancellationToken
-        );
+        (string agentOutput, string? log) = await ExecuteAgyHeadless(aiTask.RepoPath, aiTask.Prompt, cancellationToken: cancellationToken);
 
         if (string.IsNullOrEmpty(agentOutput))
         {
-            var hasExhaustedError =
-                log?.Contains("RESOURCE_EXHAUSTED (code 429): Individual quota reached") ?? false;
+            var hasExhaustedError = log?.Contains("RESOURCE_EXHAUSTED (code 429): Individual quota reached") ?? false;
             if (hasExhaustedError)
             {
                 _logger.LogWarning("Exhausted tokens for AgyChat");
@@ -64,11 +54,7 @@ internal partial class AgyChat : IAgentChat
         }
 
         string newSessionId = ExtractConversationId(agentOutput);
-        _logger.LogInformation(
-            "[Processor] Issue #{issueNum} session: '{newSessionId}'",
-            aiTask.IssueNum,
-            newSessionId
-        );
+        _logger.LogInformation("[Processor] Issue #{issueNum} session: '{newSessionId}'", aiTask.IssueNum, newSessionId);
         string cleanResponse = GetFinalResponseFromTranscript(newSessionId);
         if (string.IsNullOrEmpty(cleanResponse))
         {
@@ -80,10 +66,7 @@ internal partial class AgyChat : IAgentChat
         string planContent = await TryReadPlanArtifactAsync(newSessionId, cancellationToken);
         if (string.IsNullOrEmpty(planContent))
         {
-            _logger.LogWarning(
-                "[Processor] No plan artifact found for session '{newSessionId}'",
-                newSessionId
-            );
+            _logger.LogWarning("[Processor] No plan artifact found for session '{newSessionId}'", newSessionId);
         }
 
         return new ChatResult(cleanResponse, newSessionId, planContent);
@@ -114,12 +97,7 @@ internal partial class AgyChat : IAgentChat
         arguments.Add("--log-file");
         arguments.Add("logFileName");
 
-        var output = await _processUtils.RunProcessAsync(
-            "agy",
-            arguments,
-            repoPath,
-            cancellationToken
-        );
+        var output = await _processUtils.RunProcessAsync("agy", arguments, repoPath, cancellationToken);
 
         string? logOutput = null;
         if (File.Exists(logFileName))
@@ -134,10 +112,7 @@ internal partial class AgyChat : IAgentChat
     {
         var match = ConversationIdRegex.Match(agyOutput);
         string id = match.Success ? match.Value : string.Empty;
-        _logger.LogInformation(
-            "[AgyRunner] Extracted conversation ID: '{ConversationId}'",
-            string.IsNullOrEmpty(id) ? "none found" : id
-        );
+        _logger.LogInformation("[AgyRunner] Extracted conversation ID: '{ConversationId}'", string.IsNullOrEmpty(id) ? "none found" : id);
         return id;
     }
 
@@ -146,20 +121,13 @@ internal partial class AgyChat : IAgentChat
         if (string.IsNullOrEmpty(sessionId))
             return string.Empty;
 
-        var transcriptPath =
-            $"/root/.gemini/antigravity-cli/brain/{sessionId}/.system_generated/logs/transcript.jsonl";
+        var transcriptPath = $"/root/.gemini/antigravity-cli/brain/{sessionId}/.system_generated/logs/transcript.jsonl";
 
-        _logger.LogInformation(
-            "[Transcript] Reading transcript for session '{sessionId}'",
-            sessionId
-        );
+        _logger.LogInformation("[Transcript] Reading transcript for session '{sessionId}'", sessionId);
 
         if (!File.Exists(transcriptPath))
         {
-            _logger.LogWarning(
-                "[Transcript] Transcript not found at '{transcriptPath}'",
-                transcriptPath
-            );
+            _logger.LogWarning("[Transcript] Transcript not found at '{transcriptPath}'", transcriptPath);
             return string.Empty;
         }
 
@@ -177,15 +145,9 @@ internal partial class AgyChat : IAgentChat
                 {
                     using var doc = JsonDocument.Parse(line);
                     var root = doc.RootElement;
-                    if (
-                        root.TryGetProperty("type", out var typeProp)
-                        && typeProp.GetString() == "PLANNER_RESPONSE"
-                    )
+                    if (root.TryGetProperty("type", out var typeProp) && typeProp.GetString() == "PLANNER_RESPONSE")
                     {
-                        if (
-                            root.TryGetProperty("content", out var contentProp)
-                            && contentProp.ValueKind == JsonValueKind.String
-                        )
+                        if (root.TryGetProperty("content", out var contentProp) && contentProp.ValueKind == JsonValueKind.String)
                         {
                             var content = contentProp.GetString();
                             if (!string.IsNullOrEmpty(content))
@@ -203,12 +165,7 @@ internal partial class AgyChat : IAgentChat
         }
         catch (Exception ex)
         {
-            _logger.LogError(
-                ex,
-                "[Transcript] Error reading transcript for session '{sessionId}': {ExceptionMessage}",
-                sessionId,
-                ex.Message
-            );
+            _logger.LogError(ex, "[Transcript] Error reading transcript for session '{sessionId}': {ExceptionMessage}", sessionId, ex.Message);
         }
 
         _logger.LogInformation(
@@ -220,10 +177,7 @@ internal partial class AgyChat : IAgentChat
         return finalContent;
     }
 
-    private async Task<string> TryReadPlanArtifactAsync(
-        string sessionId,
-        CancellationToken cancellationToken = default
-    )
+    private async Task<string> TryReadPlanArtifactAsync(string sessionId, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrEmpty(sessionId))
             return string.Empty;

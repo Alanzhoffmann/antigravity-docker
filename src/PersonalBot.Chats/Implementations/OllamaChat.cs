@@ -52,23 +52,12 @@ internal class OllamaChat : IAgentChat
 
     public int SortOrder => 1;
 
-    public async Task<ChatResult> GetResponseAsync(
-        AiTask aiTask,
-        CancellationToken cancellationToken = default
-    )
+    public async Task<ChatResult> GetResponseAsync(AiTask aiTask, CancellationToken cancellationToken = default)
     {
         if (!IsEnabled)
         {
-            _logger.LogWarning(
-                "OllamaChat is not enabled due to missing configuration. Model: '{Model}', Url: '{Url}'",
-                Model,
-                Url
-            );
-            return new ChatResult(
-                "OllamaChat is not configured properly. Please check the logs for details.",
-                aiTask.IssueNum,
-                null
-            );
+            _logger.LogWarning("OllamaChat is not enabled due to missing configuration. Model: '{Model}', Url: '{Url}'", Model, Url);
+            return new ChatResult("OllamaChat is not configured properly. Please check the logs for details.", aiTask.IssueNum, null);
         }
 
         var repositoryTools = await _repositoryToolsFactory.CreateAsync(aiTask.RepoPath);
@@ -87,15 +76,9 @@ internal class OllamaChat : IAgentChat
         var aiAgent = ollamaClient.AsAIAgent(instructions: systemInstructions, tools: allowedTools);
 
         var session = await aiAgent.CreateSessionAsync(cancellationToken);
-        var serializedSession = await aiAgent.SerializeSessionAsync(
-            session,
-            cancellationToken: cancellationToken
-        );
+        var serializedSession = await aiAgent.SerializeSessionAsync(session, cancellationToken: cancellationToken);
 
-        _logger.LogInformation(
-            "This is in new serializedSession: {serializedSession}",
-            serializedSession
-        );
+        _logger.LogInformation("This is in new serializedSession: {serializedSession}", serializedSession);
 
         // Start the conversation with context for the AI model
         if (!_conversationHistories.TryGetValue(aiTask.IssueNum, out var chatHistory))
@@ -106,57 +89,27 @@ internal class OllamaChat : IAgentChat
 
         session.SetInMemoryChatHistory(chatHistory);
 
-        serializedSession = await aiAgent.SerializeSessionAsync(
-            session,
-            cancellationToken: cancellationToken
-        );
-        _logger.LogInformation(
-            "This is in serializedSession with chat history: {serializedSession}",
-            serializedSession
-        );
+        serializedSession = await aiAgent.SerializeSessionAsync(session, cancellationToken: cancellationToken);
+        _logger.LogInformation("This is in serializedSession with chat history: {serializedSession}", serializedSession);
 
         // Get user prompt and add to chat history
-        _logger.LogInformation(
-            "User prompt for issue #{issueNum}: '{prompt}'",
-            aiTask.IssueNum,
-            aiTask.Prompt
-        );
+        _logger.LogInformation("User prompt for issue #{issueNum}: '{prompt}'", aiTask.IssueNum, aiTask.Prompt);
         chatHistory.Add(new ChatMessage(ChatRole.User, aiTask.Prompt));
 
         // Stream the AI response and add to chat history
         _logger.LogInformation("Streaming response for issue #{issueNum}", aiTask.IssueNum);
         string response = await GetResponse(aiTask.Phase, aiAgent, chatHistory, cancellationToken);
 
-        _logger.LogInformation(
-            "Full response for issue #{issueNum}: '{response}'",
-            aiTask.IssueNum,
-            response
-        );
+        _logger.LogInformation("Full response for issue #{issueNum}: '{response}'", aiTask.IssueNum, response);
 
-        serializedSession = await aiAgent.SerializeSessionAsync(
-            session,
-            cancellationToken: cancellationToken
-        );
-        _logger.LogInformation(
-            "This is in serializedSession after response: {serializedSession}",
-            serializedSession
-        );
+        serializedSession = await aiAgent.SerializeSessionAsync(session, cancellationToken: cancellationToken);
+        _logger.LogInformation("This is in serializedSession after response: {serializedSession}", serializedSession);
 
         chatHistory.Add(new ChatMessage(ChatRole.Assistant, response));
 
-        serializedSession = await aiAgent.SerializeSessionAsync(
-            session,
-            cancellationToken: cancellationToken
-        );
-        _logger.LogInformation(
-            "This is in serializedSession after response added to chat history: {serializedSession}",
-            serializedSession
-        );
-        return new ChatResult(
-            response,
-            aiTask.IssueNum,
-            await _artifactParser.TryReadPlanArtifact(aiTask.RepoPath)
-        );
+        serializedSession = await aiAgent.SerializeSessionAsync(session, cancellationToken: cancellationToken);
+        _logger.LogInformation("This is in serializedSession after response added to chat history: {serializedSession}", serializedSession);
+        return new ChatResult(response, aiTask.IssueNum, await _artifactParser.TryReadPlanArtifact(aiTask.RepoPath));
     }
 
     private static string GetInstructions(AgentPhase phase) =>
@@ -199,12 +152,7 @@ internal class OllamaChat : IAgentChat
         for (int attempt = 1; attempt <= maxAttempts; attempt++)
         {
             output = output.Clear();
-            await foreach (
-                var item in aiAgent.RunStreamingAsync(
-                    chatHistory,
-                    cancellationToken: cancellationToken
-                )
-            )
+            await foreach (var item in aiAgent.RunStreamingAsync(chatHistory, cancellationToken: cancellationToken))
             {
                 output.Append(item.Text);
             }
@@ -214,19 +162,13 @@ internal class OllamaChat : IAgentChat
             // --- EXECUTION SAFETY NET ---
             if (phase == AgentPhase.Execution)
             {
-                if (
-                    response.Length < 100
-                    && (response.Contains("I will") || response.Contains("working on"))
-                )
+                if (response.Length < 100 && (response.Contains("I will") || response.Contains("working on")))
                 {
                     _logger.LogWarning("Execution agent gave a lazy response. Forcing correction.");
 
                     chatHistory.Add(new ChatMessage(ChatRole.Assistant, response));
                     chatHistory.Add(
-                        new ChatMessage(
-                            ChatRole.User,
-                            "SYSTEM ERROR: Do not converse. Use `RunBashCommand` or Roslyn tools immediately to execute the plan."
-                        )
+                        new ChatMessage(ChatRole.User, "SYSTEM ERROR: Do not converse. Use `RunBashCommand` or Roslyn tools immediately to execute the plan.")
                     );
 
                     continue;

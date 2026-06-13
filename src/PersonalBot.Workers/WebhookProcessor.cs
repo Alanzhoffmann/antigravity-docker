@@ -62,11 +62,7 @@ public partial class WebhookProcessor
                     HandlePullRequestClosed(webhook);
                     break;
                 default:
-                    _logger.LogInformation(
-                        "[Processor] Unhandled event='{eventType}' action='{action}' — no-op",
-                        webhook.EventType,
-                        webhook.Action
-                    );
+                    _logger.LogInformation("[Processor] Unhandled event='{eventType}' action='{action}' — no-op", webhook.EventType, webhook.Action);
                     break;
             }
             webhook.Status = WebhookStatus.Completed;
@@ -82,16 +78,10 @@ public partial class WebhookProcessor
         }
     }
 
-    private async Task HandleReactionCreated(
-        GitHubWebhook webhook,
-        CancellationToken cancellationToken
-    )
+    private async Task HandleReactionCreated(GitHubWebhook webhook, CancellationToken cancellationToken)
     {
         var reactionContent = webhook.ReactionContent;
-        _logger.LogInformation(
-            "[Processor] Reaction event: content='{reactionContent}'",
-            reactionContent
-        );
+        _logger.LogInformation("[Processor] Reaction event: content='{reactionContent}'", reactionContent);
         if (reactionContent == "+1" || reactionContent == "👍")
         {
             if (string.IsNullOrEmpty(webhook.IssueNumber))
@@ -99,41 +89,17 @@ public partial class WebhookProcessor
                 _logger.LogWarning($"[Processor] reaction event missing issue.number");
                 return;
             }
-            string localRepoPath = GitHubUtils.GetIssueRepoPath(
-                webhook.RepoName,
-                webhook.IssueNumber
-            );
-            await _gitHubUtils.EnsureRepoAsync(
-                localRepoPath,
-                webhook.CloneUrl,
-                webhook.RepoName,
-                webhook.IssueNumber,
-                cancellationToken
-            );
-            string sid = await _gitHubUtils.GetSessionIdFromIssueAsync(
-                localRepoPath,
-                webhook.IssueNumber,
-                cancellationToken
-            );
+            string localRepoPath = GitHubUtils.GetIssueRepoPath(webhook.RepoName, webhook.IssueNumber);
+            await _gitHubUtils.EnsureRepoAsync(localRepoPath, webhook.CloneUrl, webhook.RepoName, webhook.IssueNumber, cancellationToken);
+            string sid = await _gitHubUtils.GetSessionIdFromIssueAsync(localRepoPath, webhook.IssueNumber, cancellationToken);
             if (!string.IsNullOrEmpty(sid))
-                await HandleApprovalAsync(
-                    localRepoPath,
-                    webhook.IssueNumber,
-                    sid,
-                    cancellationToken
-                );
+                await HandleApprovalAsync(localRepoPath, webhook.IssueNumber, sid, cancellationToken);
             else
-                _logger.LogWarning(
-                    "[Processor] 👍 on #{issueNum} but no active session found",
-                    webhook.IssueNumber
-                );
+                _logger.LogWarning("[Processor] 👍 on #{issueNum} but no active session found", webhook.IssueNumber);
         }
     }
 
-    private async Task HandleIssueCommentCreated(
-        GitHubWebhook webhook,
-        CancellationToken cancellationToken
-    )
+    private async Task HandleIssueCommentCreated(GitHubWebhook webhook, CancellationToken cancellationToken)
     {
         if (string.IsNullOrEmpty(webhook.IssueNumber) || string.IsNullOrEmpty(webhook.CommentBody))
         {
@@ -148,30 +114,13 @@ public partial class WebhookProcessor
         }
 
         string localRepoPath = GitHubUtils.GetIssueRepoPath(webhook.RepoName, webhook.IssueNumber);
-        await _gitHubUtils.EnsureRepoAsync(
-            localRepoPath,
-            webhook.CloneUrl,
-            webhook.RepoName,
-            webhook.IssueNumber,
-            cancellationToken
-        );
+        await _gitHubUtils.EnsureRepoAsync(localRepoPath, webhook.CloneUrl, webhook.RepoName, webhook.IssueNumber, cancellationToken);
 
-        string activeSessionId = await _gitHubUtils.GetSessionIdFromIssueAsync(
-            localRepoPath,
-            webhook.IssueNumber,
-            cancellationToken
-        );
-        _logger.LogInformation(
-            "[Processor] issue_comment #{issueNum} activeSession='{activeSessionId}'",
-            webhook.IssueNumber,
-            activeSessionId
-        );
+        string activeSessionId = await _gitHubUtils.GetSessionIdFromIssueAsync(localRepoPath, webhook.IssueNumber, cancellationToken);
+        _logger.LogInformation("[Processor] issue_comment #{issueNum} activeSession='{activeSessionId}'", webhook.IssueNumber, activeSessionId);
         if (string.IsNullOrEmpty(activeSessionId))
         {
-            _logger.LogWarning(
-                "[Processor] No active session for #{issueNum}",
-                webhook.IssueNumber
-            );
+            _logger.LogWarning("[Processor] No active session for #{issueNum}", webhook.IssueNumber);
             return;
         }
 
@@ -182,12 +131,7 @@ public partial class WebhookProcessor
 
         if (isApproval)
         {
-            await HandleApprovalAsync(
-                localRepoPath,
-                webhook.IssueNumber,
-                activeSessionId,
-                cancellationToken
-            );
+            await HandleApprovalAsync(localRepoPath, webhook.IssueNumber, activeSessionId, cancellationToken);
         }
         else
         {
@@ -209,16 +153,8 @@ public partial class WebhookProcessor
                 },
                 cancellationToken
             );
-            var comment = !string.IsNullOrEmpty(response.ArtifactOutput)
-                ? response.ArtifactOutput
-                : response.Output;
-            await _gitHubUtils.PostGitHubCommentAsync(
-                localRepoPath,
-                webhook.IssueNumber,
-                comment,
-                activeSessionId,
-                cancellationToken
-            );
+            var comment = !string.IsNullOrEmpty(response.ArtifactOutput) ? response.ArtifactOutput : response.Output;
+            await _gitHubUtils.PostGitHubCommentAsync(localRepoPath, webhook.IssueNumber, comment, activeSessionId, cancellationToken);
         }
     }
 
@@ -234,11 +170,7 @@ public partial class WebhookProcessor
                 string path = GitHubUtils.GetIssueRepoPath(webhook.RepoName, issueNum);
                 if (Directory.Exists(path))
                 {
-                    _logger.LogInformation(
-                        "[Processor] Deleting isolated clone for issue #{issueNum}: '{path}'",
-                        issueNum,
-                        path
-                    );
+                    _logger.LogInformation("[Processor] Deleting isolated clone for issue #{issueNum}: '{path}'", issueNum, path);
                     try
                     {
                         Directory.Delete(path, recursive: true);
@@ -246,30 +178,16 @@ public partial class WebhookProcessor
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogError(
-                            ex,
-                            "[Processor] Failed to delete '{Path}': {ExceptionMessage}",
-                            path,
-                            ex.Message
-                        );
+                        _logger.LogError(ex, "[Processor] Failed to delete '{Path}': {ExceptionMessage}", path, ex.Message);
                     }
                 }
             }
         }
     }
 
-    private async Task HandleApprovalAsync(
-        string localRepoPath,
-        string issueNum,
-        string sessionId,
-        CancellationToken cancellationToken = default
-    )
+    private async Task HandleApprovalAsync(string localRepoPath, string issueNum, string sessionId, CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation(
-            "[Approval] Plan approved for issue #{issueNum} (session={sessionId}) — starting implementation",
-            issueNum,
-            sessionId
-        );
+        _logger.LogInformation("[Approval] Plan approved for issue #{issueNum} (session={sessionId}) — starting implementation", issueNum, sessionId);
         string prompt =
             $"The plan for Issue #{issueNum} has been approved. Create branch 'fix/issue-{issueNum}', implement the code changes, run any available local tests, and raise a PR via `gh pr create`. Commit only changes related to this issue.";
         var agentChat = _chatResolver.ResolveCurrent();
@@ -283,17 +201,8 @@ public partial class WebhookProcessor
             },
             cancellationToken
         );
-        await _gitHubUtils.PostGitHubCommentAsync(
-            localRepoPath,
-            issueNum,
-            response,
-            sessionId,
-            cancellationToken
-        );
-        _logger.LogInformation(
-            "[Approval] Implementation complete for issue #{issueNum}",
-            issueNum
-        );
+        await _gitHubUtils.PostGitHubCommentAsync(localRepoPath, issueNum, response, sessionId, cancellationToken);
+        _logger.LogInformation("[Approval] Implementation complete for issue #{issueNum}", issueNum);
     }
 
     [GeneratedRegex(@"fix/issue-(\d+)")]

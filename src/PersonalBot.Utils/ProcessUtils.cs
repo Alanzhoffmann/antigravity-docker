@@ -19,12 +19,7 @@ public class ProcessUtils
         CancellationToken cancellationToken = default
     )
     {
-        _logger.LogInformation(
-            "Executing: {FileName} {Arguments} (cwd='{WorkingDirectory}')",
-            fileName,
-            arguments,
-            workingDirectory
-        );
+        _logger.LogInformation("Executing: {FileName} {Arguments} (cwd='{WorkingDirectory}')", fileName, arguments, workingDirectory);
 
         var startInfo = new ProcessStartInfo
         {
@@ -42,25 +37,15 @@ public class ProcessUtils
         }
 
         var sw = Stopwatch.StartNew();
-        var output = await Process.RunAndCaptureTextAsync(
-            startInfo,
-            cancellationToken: cancellationToken
-        );
+        var output = await Process.RunAndCaptureTextAsync(startInfo, cancellationToken: cancellationToken);
 
         sw.Stop();
 
-        _logger.LogInformation(
-            "{Command} exited code={ExitCode} in {ElapsedSeconds:F1}s",
-            fileName,
-            output.ExitStatus.ExitCode,
-            sw.Elapsed.TotalSeconds
-        );
+        _logger.LogInformation("{Command} exited code={ExitCode} in {ElapsedSeconds:F1}s", fileName, output.ExitStatus.ExitCode, sw.Elapsed.TotalSeconds);
 
         if (!string.IsNullOrEmpty(output.StandardError))
             _logger.LogWarning("stderr: {StandardError}", output.StandardError.Trim());
 
-        return output.ExitStatus.ExitCode == 0
-            ? output.StandardOutput
-            : $"{fileName} error: {output.StandardError}";
+        return output.ExitStatus.ExitCode == 0 ? output.StandardOutput : $"{fileName} error: {output.StandardError}";
     }
 }

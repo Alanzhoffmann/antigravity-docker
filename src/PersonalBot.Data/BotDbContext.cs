@@ -6,10 +6,7 @@ namespace PersonalBot.Data;
 
 public class BotDbContext : DbContext
 {
-    public BotDbContext(
-        DbContextOptions<BotDbContext> dbOptions,
-        MigrationState<BotDbContext> migrationState
-    )
+    public BotDbContext(DbContextOptions<BotDbContext> dbOptions, MigrationState<BotDbContext> migrationState)
         : base(dbOptions)
     {
         MigrationState = migrationState;

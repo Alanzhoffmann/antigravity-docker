@@ -11,10 +11,7 @@ public class ArtifactParser
         _logger = logger;
     }
 
-    public async ValueTask<string> TryReadPlanArtifact(
-        string directory,
-        CancellationToken cancellationToken = default
-    )
+    public async ValueTask<string> TryReadPlanArtifact(string directory, CancellationToken cancellationToken = default)
     {
         if (!Directory.Exists(directory))
         {
@@ -36,11 +33,7 @@ public class ArtifactParser
         try
         {
             string content = await File.ReadAllTextAsync(candidates[0], cancellationToken);
-            _logger.LogInformation(
-                "Read plan artifact '{PlanArtifact}': {ContentLength} chars",
-                candidates[0],
-                content.Length
-            );
+            _logger.LogInformation("Read plan artifact '{PlanArtifact}': {ContentLength} chars", candidates[0], content.Length);
             return content;
         }
         catch (Exception ex)

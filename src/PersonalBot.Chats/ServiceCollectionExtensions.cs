@@ -18,11 +18,8 @@ public static class ServiceCollectionExtensions
             nameof(OllamaChat),
             (serviceProvider, client) =>
             {
-                var options = serviceProvider
-                    .GetRequiredService<IOptionsMonitor<OllamaOptions>>()
-                    .CurrentValue;
-                client.BaseAddress =
-                    options.Url ?? throw new InvalidOperationException("Ollama url is missing");
+                var options = serviceProvider.GetRequiredService<IOptionsMonitor<OllamaOptions>>().CurrentValue;
+                client.BaseAddress = options.Url ?? throw new InvalidOperationException("Ollama url is missing");
                 client.Timeout = Timeout.InfiniteTimeSpan;
             }
         );

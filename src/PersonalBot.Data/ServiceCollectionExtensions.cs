@@ -10,9 +10,7 @@ public static class ServiceCollectionExtensions
 {
     public static IServiceCollection AddDatabase(this IServiceCollection services)
     {
-        services.AddDbContext<BotDbContext>(options =>
-            options.UseSqlite("Data Source=/config/app.db;Cache=Shared")
-        );
+        services.AddDbContext<BotDbContext>(options => options.UseSqlite("Data Source=/config/app.db;Cache=Shared"));
         services.AddDataBackgroundServices<BotDbContext>();
         services.AddScoped<ITaskService, TaskService>();
         services.AddScoped<IWebhookService, WebhookService>();

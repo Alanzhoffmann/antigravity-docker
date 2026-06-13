@@ -12,11 +12,7 @@ public class ChatRunner
     private readonly ITaskService _taskService;
     private readonly ILogger<ChatRunner> _logger;
 
-    public ChatRunner(
-        IChatResolver chatResolver,
-        ITaskService taskService,
-        ILogger<ChatRunner> logger
-    )
+    public ChatRunner(IChatResolver chatResolver, ITaskService taskService, ILogger<ChatRunner> logger)
     {
         _chatResolver = chatResolver;
         _taskService = taskService;
@@ -45,10 +41,7 @@ public class ChatRunner
             nextTask.Status = AiTaskStatus.Running;
             await _taskService.CommitAsync(cancellationToken);
 
-            var result = await currentChat.GetResponseAsync(
-                nextTask,
-                cancellationToken: cancellationToken
-            );
+            var result = await currentChat.GetResponseAsync(nextTask, cancellationToken: cancellationToken);
             nextTask.Status = AiTaskStatus.Completed;
         }
         catch (Exception ex)
