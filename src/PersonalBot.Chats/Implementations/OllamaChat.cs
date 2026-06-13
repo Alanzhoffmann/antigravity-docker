@@ -67,13 +67,7 @@ internal class OllamaChat : IAgentChat
         using IChatClient ollamaClient = new OllamaApiClient(client, Model);
         string systemInstructions = GetInstructions(aiTask.Phase);
 
-        // Security: Only give the execution agent the ability to write code and run bash
-        IList<AITool> allowedTools =
-            aiTask.Phase is AgentPhase.Planning
-                ? [.. repositoryTools.ReadOnlyTools, .. roslynAgentTools.ReadOnlyTools] // Read-only tools
-                : [.. repositoryTools.Tools, .. roslynAgentTools.Tools]; // Full read/write suite
-
-        var aiAgent = ollamaClient.AsAIAgent(instructions: systemInstructions, tools: allowedTools);
+        var aiAgent = ollamaClient.AsAIAgent(instructions: systemInstructions, tools: [.. repositoryTools.Tools, .. roslynAgentTools.Tools]);
 
         var session = await aiAgent.CreateSessionAsync(cancellationToken);
         var serializedSession = await aiAgent.SerializeSessionAsync(session, cancellationToken: cancellationToken);
