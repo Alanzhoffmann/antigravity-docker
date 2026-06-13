@@ -10,6 +10,11 @@ public class IssueCommentCreated : Workflow
         CloneUrl = webhook.CloneUrl;
     }
 
+    private IssueCommentCreated()
+    {
+        RepoName = string.Empty;
+    }
+
     public string? IssueNumber { get; set; }
     public string? CommentBody { get; set; }
     public string RepoName { get; set; }

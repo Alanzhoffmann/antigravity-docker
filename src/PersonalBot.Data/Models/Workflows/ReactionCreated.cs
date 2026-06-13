@@ -1,3 +1,5 @@
+using Microsoft.EntityFrameworkCore.Metadata.Builders;
+
 namespace PersonalBot.Data.Models.Workflows;
 
 public class ReactionCreated : Workflow
@@ -8,6 +10,11 @@ public class ReactionCreated : Workflow
         IssueNumber = webhook.IssueNumber;
         RepoName = webhook.RepoName;
         CloneUrl = webhook.CloneUrl;
+    }
+
+    private ReactionCreated()
+    {
+        RepoName = string.Empty;
     }
 
     public string? ReactionContent { get; set; }

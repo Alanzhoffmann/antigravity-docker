@@ -9,6 +9,11 @@ public class PullRequestClosed : Workflow
         RepoName = webhook.RepoName;
     }
 
+    private PullRequestClosed()
+    {
+        RepoName = string.Empty;
+    }
+
     public bool PrMerged { get; set; }
     public string? HeadRef { get; set; }
     public string RepoName { get; set; }
