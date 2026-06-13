@@ -7,13 +7,13 @@ using PersonalBot.Utils;
 
 namespace PersonalBot.Workflows.Handlers;
 
-public class IssueCreatedHandler : INotificationHandler<IssueOpened>
+public class IssueOpenedHandler : INotificationHandler<IssueOpened>
 {
     private readonly GitHubUtils _gitHubUtils;
     private readonly IChatResolver _chatResolver;
-    private readonly ILogger<IssueCreatedHandler> _logger;
+    private readonly ILogger<IssueOpenedHandler> _logger;
 
-    public IssueCreatedHandler(GitHubUtils gitHubUtils, IChatResolver chatResolver, ILogger<IssueCreatedHandler> logger)
+    public IssueOpenedHandler(GitHubUtils gitHubUtils, IChatResolver chatResolver, ILogger<IssueOpenedHandler> logger)
     {
         _gitHubUtils = gitHubUtils;
         _chatResolver = chatResolver;

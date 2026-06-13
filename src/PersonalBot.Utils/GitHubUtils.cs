@@ -37,29 +37,24 @@ public partial class GitHubUtils
         }
     }
 
-    public async Task PostGitHubCommentAsync(string repoPath, string issueNum, string body, string sessionId, CancellationToken cancellationToken = default)
+    public async Task PostGitHubCommentAsync(string repoPath, string issueNum, string body, string? sessionId, CancellationToken cancellationToken = default)
     {
         string payload = string.IsNullOrEmpty(sessionId) ? body : $"{body}\n\n<!-- agy-session-id: {sessionId} -->";
 
         payload += $"\n\n{BotWatermark}";
 
-        _logger.LogInformation(
-            "[GitHub] Posting comment on issue #{issueNum} (session='{sessionId}', length={PayloadLength})",
-            issueNum,
-            sessionId,
-            payload.Length
-        );
+        _logger.LogInformation("Posting comment on issue #{issueNum} (session='{sessionId}', length={PayloadLength})", issueNum, sessionId, payload.Length);
 
         await _processUtils.RunProcessAsync("gh", ["issue", "comment", issueNum, "--body", payload], repoPath, cancellationToken);
     }
 
-    public async Task<string> GetSessionIdFromIssueAsync(string repoPath, string issueNum, CancellationToken cancellationToken = default)
+    public async Task<string?> GetSessionIdFromIssueAsync(string repoPath, string issueNum, CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("[GitHub] Fetching session ID from issue #{issueNum}", issueNum);
+        _logger.LogInformation("Fetching session ID from issue #{issueNum}", issueNum);
         string commentsJson = await _processUtils.RunProcessAsync("gh", ["issue", "view", issueNum, "--json", "comments"], repoPath, cancellationToken);
         var match = SessionIdRegex.Match(commentsJson);
-        string sessionId = match.Success ? match.Groups[1].Value : string.Empty;
-        _logger.LogInformation("[GitHub] Session ID for issue #{issueNum}: '{sessionId}'", issueNum, string.IsNullOrEmpty(sessionId) ? "none" : sessionId);
+        var sessionId = match.Success ? match.Groups[1].Value : null;
+        _logger.LogInformation("Session ID for issue #{issueNum}: '{sessionId}'", issueNum, string.IsNullOrEmpty(sessionId) ? "none" : sessionId);
         return sessionId;
     }
 
