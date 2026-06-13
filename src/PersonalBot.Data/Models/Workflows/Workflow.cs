@@ -1,8 +1,12 @@
 using Mediator;
+using PersonalBot.Data.Models.Enums;
 
 namespace PersonalBot.Data.Models.Workflows;
 
 public abstract class Workflow : INotification
 {
     public Guid Id { get; set; }
+    public int RetryCount { get; set; }
+    public WorkflowStatus Status { get; set; }
+    public string? Output { get; set; }
 }
