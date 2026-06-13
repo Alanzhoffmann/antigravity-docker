@@ -57,16 +57,16 @@ public static class GithubHookEndpoint
 
                 try
                 {
-                    await webhookService.AddNewAsync(
+                    webhookService.AddNew(
                         new()
                         {
                             EventType = eventType,
                             DeliveryId = deliveryId,
                             RawBody = rawBody,
                             RepoName = repoName,
-                        },
-                        cancellationToken
+                        }
                     );
+                    await webhookService.CommitAsync(cancellationToken);
                 }
                 catch (Exception ex)
                 {

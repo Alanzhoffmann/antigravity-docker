@@ -24,12 +24,13 @@ public partial class _20260612221053_InitialMigration : Migration
                 Agent = table.Column<string>(type: "TEXT", nullable: true),
                 Status = table.Column<int>(type: "INTEGER", nullable: false),
                 CreatedAt = table.Column<DateTimeOffset>(type: "TEXT", nullable: false),
-                RetryCount = table.Column<int>(type: "INTEGER", nullable: false)
+                RetryCount = table.Column<int>(type: "INTEGER", nullable: false),
             },
             constraints: table =>
             {
                 table.PrimaryKey("PK_AiTasks", x => x.Id);
-            });
+            }
+        );
 
         migrationBuilder.CreateTable(
             name: "Webhooks",
@@ -48,21 +49,20 @@ public partial class _20260612221053_InitialMigration : Migration
                 ReactionContent = table.Column<string>(type: "TEXT", nullable: true),
                 CommentBody = table.Column<string>(type: "TEXT", nullable: true),
                 PrMerged = table.Column<bool>(type: "INTEGER", nullable: false),
-                HeadRef = table.Column<string>(type: "TEXT", nullable: true)
+                HeadRef = table.Column<string>(type: "TEXT", nullable: true),
             },
             constraints: table =>
             {
                 table.PrimaryKey("PK_Webhooks", x => x.DeliveryId);
-            });
+            }
+        );
     }
 
     /// <inheritdoc />
     protected override void Down(MigrationBuilder migrationBuilder)
     {
-        migrationBuilder.DropTable(
-            name: "AiTasks");
+        migrationBuilder.DropTable(name: "AiTasks");
 
-        migrationBuilder.DropTable(
-            name: "Webhooks");
+        migrationBuilder.DropTable(name: "Webhooks");
     }
 }

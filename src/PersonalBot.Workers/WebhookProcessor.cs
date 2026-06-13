@@ -34,47 +34,50 @@ public partial class WebhookProcessor
 
     internal async ValueTask ProcessNextAsync(CancellationToken cancellationToken = default)
     {
-        var nextWebhook = await _webhookService.GetNextAsync(cancellationToken);
-        if (nextWebhook is not null)
+        var webhook = await _webhookService.GetNextAsync(cancellationToken);
+        if (webhook is null)
         {
-            await ProcessWebhookAsync(nextWebhook, cancellationToken);
+            return;
         }
-    }
-
-    private async ValueTask ProcessWebhookAsync(
-        GitHubWebhook webhook,
-        CancellationToken cancellationToken = default
-    )
-    {
-        _logger.LogInformation(
-            "Processing event='{eventType}' action delivery='{deliveryId}' repo='{repoName}' action='{action}'",
-            webhook.EventType,
-            webhook.DeliveryId,
-            webhook.RepoName,
-            webhook.Action
-        );
-
-        switch (webhook)
+        try
         {
-            case { EventType: "issues", Action: "opened" }:
-                await HandleIssueOpened(webhook, cancellationToken);
-                break;
-            case { EventType: "reaction", Action: "created" }:
-                await HandleReactionCreated(webhook, cancellationToken);
-                break;
-            case { EventType: "issue_comment", Action: "created" }:
-                await HandleIssueCommentCreated(webhook, cancellationToken);
-                break;
-            case { EventType: "pull_request", Action: "closed" }:
-                HandlePullRequestClosed(webhook);
-                break;
-            default:
-                _logger.LogInformation(
-                    "[Processor] Unhandled event='{eventType}' action='{action}' — no-op",
-                    webhook.EventType,
-                    webhook.Action
-                );
-                break;
+            _logger.LogInformation("Processing {Webhook}", webhook);
+
+            webhook.Status = WebhookStatus.Running;
+            await _webhookService.CommitAsync(cancellationToken);
+
+            switch (webhook)
+            {
+                case { EventType: "issues", Action: "opened" }:
+                    await HandleIssueOpened(webhook, cancellationToken);
+                    break;
+                case { EventType: "reaction", Action: "created" }:
+                    await HandleReactionCreated(webhook, cancellationToken);
+                    break;
+                case { EventType: "issue_comment", Action: "created" }:
+                    await HandleIssueCommentCreated(webhook, cancellationToken);
+                    break;
+                case { EventType: "pull_request", Action: "closed" }:
+                    HandlePullRequestClosed(webhook);
+                    break;
+                default:
+                    _logger.LogInformation(
+                        "[Processor] Unhandled event='{eventType}' action='{action}' — no-op",
+                        webhook.EventType,
+                        webhook.Action
+                    );
+                    break;
+            }
+            webhook.Status = WebhookStatus.Completed;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error when processing {Webhook}", webhook);
+            webhook.Status = WebhookStatus.Failed;
+        }
+        finally
+        {
+            await _webhookService.CommitAsync(cancellationToken);
         }
     }
 

@@ -8,7 +8,7 @@ public class GitHubWebhook
     public required string EventType { get; set; }
     public required string DeliveryId { get; set; }
     public DateTime CreatedAt { get; } = DateTime.UtcNow;
-    public bool IsProcessed { get; set; }
+    public WebhookStatus Status { get; set; } = WebhookStatus.Pending;
     public required string RawBody
     {
         get;
@@ -40,4 +40,7 @@ public class GitHubWebhook
     public string? CommentBody { get; private set; }
     public bool PrMerged { get; private set; }
     public string? HeadRef { get; private set; }
+
+    public override string ToString() =>
+        $"event='{EventType}' action='{Action}' delivery='{DeliveryId}' repo='{RepoName}'";
 }

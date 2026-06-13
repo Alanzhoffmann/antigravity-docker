@@ -13,19 +13,24 @@ internal class WebhookService : IWebhookService
         _context = context;
     }
 
-    public async Task AddNewAsync(
-        GitHubWebhook webhook,
-        CancellationToken cancellationToken = default
-    )
+    public void AddNew(GitHubWebhook webhook)
     {
-        if (_context.MigrationState.IsDone)
-        {
-            _context.Add(webhook);
-            await _context.SaveChangesAsync(cancellationToken);
-        }
+        _context.Add(webhook);
     }
 
-    public async Task<GitHubWebhook?> GetNextAsync(CancellationToken cancellationToken = default)
+    public async ValueTask CommitAsync(CancellationToken cancellationToken = default)
+    {
+        if (!_context.MigrationState.IsDone)
+        {
+            return;
+        }
+
+        await _context.SaveChangesAsync(cancellationToken);
+    }
+
+    public async ValueTask<GitHubWebhook?> GetNextAsync(
+        CancellationToken cancellationToken = default
+    )
     {
         if (!_context.MigrationState.IsDone)
         {
@@ -34,6 +39,9 @@ internal class WebhookService : IWebhookService
 
         return await _context
             .Webhooks.OrderBy(w => w.CreatedAt)
-            .FirstOrDefaultAsync(w => !w.IsProcessed, cancellationToken: cancellationToken);
+            .FirstOrDefaultAsync(
+                w => w.Status == WebhookStatus.Pending,
+                cancellationToken: cancellationToken
+            );
     }
 }

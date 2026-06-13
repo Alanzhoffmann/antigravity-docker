@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using PersonalBot.Data;
 
@@ -10,14 +11,11 @@ using PersonalBot.Data;
 namespace PersonalBot.Data.Migrations;
 
 [DbContext(typeof(BotDbContext))]
-partial class BotDbContextModelSnapshot : ModelSnapshot
+[Migration("20260612233630_WebhookCreatedAt")]
+partial class _20260612233630_WebhookCreatedAt
 {
-    // If you encounter a merge conflict in the line below, it means you need to
-    // discard one of the migration branches and recreate its migrations on top of
-    // the other branch. See https://aka.ms/efcore-docs-migrations-conflicts for more info.
-    public override string LastMigrationId => "20260613000643_WebhookStatus";
-
-    protected override void BuildModel(ModelBuilder modelBuilder)
+    /// <inheritdoc />
+    protected override void BuildTargetModel(ModelBuilder modelBuilder)
     {
 #pragma warning disable 612, 618
         modelBuilder.HasAnnotation("ProductVersion", "11.0.0-preview.5.26302.115");
@@ -87,6 +85,9 @@ partial class BotDbContextModelSnapshot : ModelSnapshot
                 b.Property<string>("HeadRef")
                     .HasColumnType("TEXT");
 
+                b.Property<bool>("IsProcessed")
+                    .HasColumnType("INTEGER");
+
                 b.Property<string>("IssueBody")
                     .HasColumnType("TEXT");
 
@@ -109,9 +110,6 @@ partial class BotDbContextModelSnapshot : ModelSnapshot
                 b.Property<string>("RepoName")
                     .IsRequired()
                     .HasColumnType("TEXT");
-
-                b.Property<int>("Status")
-                    .HasColumnType("INTEGER");
 
                 b.HasKey("DeliveryId");
 
