@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using PersonalBot.Chats.Interfaces;
@@ -14,7 +13,7 @@ public partial class WebhookProcessor
     private readonly ILogger<WebhookProcessor> _logger;
     private readonly IWebhookService _webhookService;
     private readonly GitHubUtils _gitHubUtils;
-    private readonly IAgentChat _agentChat;
+    private readonly IChatResolver _chatResolver;
 
     public WebhookProcessor(
         ILogger<WebhookProcessor> logger,
@@ -26,7 +25,7 @@ public partial class WebhookProcessor
         _logger = logger;
         _webhookService = webhookService;
         _gitHubUtils = gitHubUtils;
-        _agentChat = chatResolver.ResolveCurrent();
+        _chatResolver = chatResolver;
     }
 
     internal async ValueTask ProcessNextAsync(CancellationToken cancellationToken = default)
@@ -116,8 +115,9 @@ INSTRUCTIONS:
             "[Processor] Starting agent for issue #{issueNum}",
             webhook.IssueNumber
         );
+        var agentChat = _chatResolver.ResolveCurrent();
         (string cleanResponse, string newSessionId, string? artifactOutput) =
-            await _agentChat.GetResponseAsync(
+            await agentChat.GetResponseAsync(
                 new()
                 {
                     RepoPath = localRepoPath,
@@ -257,7 +257,8 @@ INSTRUCTIONS:
                 webhook.IssueNumber,
                 webhook.CommentBody[..Math.Min(80, webhook.CommentBody.Length)]
             );
-            var response = await _agentChat.GetResponseAsync(
+            var agentChat = _chatResolver.ResolveCurrent();
+            var response = await agentChat.GetResponseAsync(
                 new()
                 {
                     RepoPath = localRepoPath,
@@ -330,7 +331,8 @@ INSTRUCTIONS:
         );
         string prompt =
             $"The plan for Issue #{issueNum} has been approved. Create branch 'fix/issue-{issueNum}', implement the code changes, run any available local tests, and raise a PR via `gh pr create`. Commit only changes related to this issue.";
-        string response = await _agentChat.GetResponseAsync(
+        var agentChat = _chatResolver.ResolveCurrent();
+        string response = await agentChat.GetResponseAsync(
             new()
             {
                 RepoPath = localRepoPath,
