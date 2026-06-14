@@ -12,13 +12,13 @@ namespace PersonalBot.Workflows.BackgroundServices;
 public class WorkflowRunnerBackgroundService : BackgroundService
 {
     private readonly IServiceScopeFactory _serviceScopeFactory;
-    private readonly ISender _sender;
+    private readonly IPublisher _publisher;
     private readonly ILogger<WorkflowRunnerBackgroundService> _logger;
 
-    public WorkflowRunnerBackgroundService(IServiceScopeFactory serviceScopeFactory, ISender sender, ILogger<WorkflowRunnerBackgroundService> logger)
+    public WorkflowRunnerBackgroundService(IServiceScopeFactory serviceScopeFactory, IPublisher publisher, ILogger<WorkflowRunnerBackgroundService> logger)
     {
         _serviceScopeFactory = serviceScopeFactory;
-        _sender = sender;
+        _publisher = publisher;
         _logger = logger;
     }
 
@@ -29,14 +29,21 @@ public class WorkflowRunnerBackgroundService : BackgroundService
             using var scope = _serviceScopeFactory.CreateScope();
             var context = scope.ServiceProvider.GetRequiredService<BotDbContext>();
             Workflow? nextWorkflow;
-            while ((nextWorkflow = await context.Workflows.OrderBy(w => w.CreatedAt).FirstOrDefaultAsync(w => w.Status == WorkflowStatus.Pending)) is not null)
+            while (
+                (
+                    nextWorkflow = await context
+                        .Workflows.OrderBy(w => w.CreatedAt)
+                        .FirstOrDefaultAsync(w => w.Status == WorkflowStatus.Pending, cancellationToken: stoppingToken)
+                )
+                    is not null
+            )
             {
                 try
                 {
                     _logger.LogInformation("Running workflow {Workflow}", nextWorkflow);
                     nextWorkflow.Status = WorkflowStatus.Running;
                     await context.SaveChangesAsync(stoppingToken);
-                    await _sender.Send(nextWorkflow, stoppingToken);
+                    await _publisher.Publish(nextWorkflow, stoppingToken);
                     nextWorkflow.Status = WorkflowStatus.Completed;
                 }
                 catch (Exception ex)
