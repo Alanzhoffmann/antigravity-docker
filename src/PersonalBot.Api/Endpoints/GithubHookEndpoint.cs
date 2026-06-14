@@ -1,5 +1,6 @@
 using System.Text.Json;
-using PersonalBot.Data.Interfaces;
+using PersonalBot.Data;
+using PersonalBot.Data.Models.Workflows;
 using PersonalBot.Utils;
 
 namespace PersonalBot.Api.Endpoints;
@@ -16,7 +17,7 @@ public static class GithubHookEndpoint
 
         app.MapPost(
             "/github-webhook",
-            async (IWebhookService webhookService, HttpContext context, CancellationToken cancellationToken) =>
+            async (BotDbContext dbContext, HttpContext context, CancellationToken cancellationToken) =>
             {
                 var eventType = context.Request.Headers["X-GitHub-Event"].ToString();
                 var deliveryId = context.Request.Headers["X-GitHub-Delivery"].ToString();
@@ -57,8 +58,8 @@ public static class GithubHookEndpoint
 
                 try
                 {
-                    webhookService.AddNew(
-                        new()
+                    dbContext.Add(
+                        new WebhookReceived
                         {
                             EventType = eventType,
                             DeliveryId = deliveryId,
@@ -66,7 +67,7 @@ public static class GithubHookEndpoint
                             RepoName = repoName,
                         }
                     );
-                    await webhookService.CommitAsync(cancellationToken);
+                    await dbContext.SaveChangesAsync(cancellationToken);
                 }
                 catch (Exception ex)
                 {

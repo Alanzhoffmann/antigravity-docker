@@ -14,7 +14,6 @@ public class BotDbContext : DbContext
     }
 
     public DbSet<AiTask> AiTasks => Set<AiTask>();
-    public DbSet<GitHubWebhook> Webhooks => Set<GitHubWebhook>();
 
     public DbSet<Workflow> Workflows => Set<Workflow>();
 

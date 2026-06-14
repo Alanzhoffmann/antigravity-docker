@@ -39,7 +39,7 @@ public class IssueCommentCreatedHandler : INotificationHandler<IssueCommentCreat
         string localRepoPath = GitHubUtils.GetIssueRepoPath(notification.RepoName, notification.IssueNumber);
         await _gitHubUtils.EnsureRepoAsync(localRepoPath, notification.CloneUrl, notification.RepoName, notification.IssueNumber, cancellationToken);
 
-        string activeSessionId = await _gitHubUtils.GetSessionIdFromIssueAsync(localRepoPath, notification.IssueNumber, cancellationToken);
+        var activeSessionId = await _gitHubUtils.GetSessionIdFromIssueAsync(localRepoPath, notification.IssueNumber, cancellationToken);
         _logger.LogInformation("issue_comment #{issueNum} activeSession='{activeSessionId}'", notification.IssueNumber, activeSessionId);
         if (string.IsNullOrEmpty(activeSessionId))
         {

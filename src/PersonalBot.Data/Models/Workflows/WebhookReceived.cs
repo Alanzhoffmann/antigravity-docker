@@ -1,15 +1,13 @@
 using System.Text.Json;
-using PersonalBot.Data.Models.Enums;
 using PersonalBot.Utils;
 
-namespace PersonalBot.Data.Models;
+namespace PersonalBot.Data.Models.Workflows;
 
-public class GitHubWebhook
+public class WebhookReceived : Workflow
 {
     public required string EventType { get; set; }
     public required string DeliveryId { get; set; }
-    public DateTime CreatedAt { get; } = DateTime.UtcNow;
-    public WebhookStatus Status { get; set; } = WebhookStatus.Pending;
+    public required string RepoName { get; set; }
     public required string RawBody
     {
         get;
@@ -28,9 +26,9 @@ public class GitHubWebhook
             HeadRef = document.RootElement.GetNestedStringSafe("pull_request", "head", "ref");
         }
     }
-    public required string RepoName { get; set; }
-    public string? CloneUrl { get; private set; }
+
     public string? Action { get; private set; }
+    public string? CloneUrl { get; private set; }
     public string? IssueNumber { get; private set; }
     public string? IssueTitle { get; private set; }
     public string? IssueBody { get; private set; }

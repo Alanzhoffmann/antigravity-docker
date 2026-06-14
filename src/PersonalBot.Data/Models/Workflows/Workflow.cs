@@ -9,4 +9,5 @@ public abstract class Workflow : INotification
     public int RetryCount { get; set; }
     public WorkflowStatus Status { get; set; }
     public string? Output { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }

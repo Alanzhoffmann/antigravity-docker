@@ -5,7 +5,6 @@
     <Project Path="src/PersonalBot.Data/PersonalBot.Data.csproj" />
     <Project Path="src/PersonalBot.Tools/PersonalBot.Tools.csproj" />
     <Project Path="src/PersonalBot.Utils/PersonalBot.Utils.csproj" />
-    <Project Path="src/PersonalBot.Workers/PersonalBot.Workers.csproj" />
     <Project Path="src/PersonalBot.Workflows/PersonalBot.Workflows.csproj" />
   </Folder>
 </Solution>

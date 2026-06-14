@@ -13,7 +13,6 @@ public static class ServiceCollectionExtensions
         services.AddDbContext<BotDbContext>(options => options.UseSqlite("Data Source=/config/app.db;Cache=Shared"));
         services.AddDataBackgroundServices<BotDbContext>();
         services.AddScoped<ITaskService, TaskService>();
-        services.AddScoped<IWebhookService, WebhookService>();
 
         return services;
     }

@@ -1,9 +1,9 @@
 using PersonalBot.Api.Endpoints;
-using PersonalBot.Workers;
+using PersonalBot.Workflows;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddBackgroundServices();
+builder.Services.AddWorkflows();
 
 var app = builder.Build();
 
