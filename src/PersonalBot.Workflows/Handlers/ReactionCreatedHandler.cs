@@ -1,5 +1,7 @@
 using Mediator;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using PersonalBot.Data;
 using PersonalBot.Data.Models.Workflows;
 using PersonalBot.Utils;
 
@@ -7,13 +9,13 @@ namespace PersonalBot.Workflows.Handlers;
 
 public class ReactionCreatedHandler : INotificationHandler<ReactionCreated>
 {
-    private readonly IPublisher _publisher;
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly GitHubUtils _gitHubUtils;
     private readonly ILogger<ReactionCreatedHandler> _logger;
 
-    public ReactionCreatedHandler(IPublisher publisher, GitHubUtils gitHubUtils, ILogger<ReactionCreatedHandler> logger)
+    public ReactionCreatedHandler(IServiceScopeFactory scopeFactory, GitHubUtils gitHubUtils, ILogger<ReactionCreatedHandler> logger)
     {
-        _publisher = publisher;
+        _scopeFactory = scopeFactory;
         _gitHubUtils = gitHubUtils;
         _logger = logger;
     }
@@ -32,15 +34,17 @@ public class ReactionCreatedHandler : INotificationHandler<ReactionCreated>
             await _gitHubUtils.EnsureRepoAsync(localRepoPath, notification.CloneUrl, notification.RepoName, notification.IssueNumber, cancellationToken);
             var sid = await _gitHubUtils.GetSessionIdFromIssueAsync(localRepoPath, notification.IssueNumber, cancellationToken);
 
-            await _publisher.Publish(
+            using var scope = _scopeFactory.CreateScope();
+            var context = scope.ServiceProvider.GetRequiredService<BotDbContext>();
+            context.Add(
                 new TaskApproved
                 {
                     RepoPath = localRepoPath,
                     IssueNumber = notification.IssueNumber,
                     SessionId = sid,
-                },
-                cancellationToken
+                }
             );
+            await context.SaveChangesAsync(cancellationToken);
         }
     }
 }

@@ -1,6 +1,8 @@
 using Mediator;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using PersonalBot.Chats.Interfaces;
+using PersonalBot.Data;
 using PersonalBot.Data.Models.Enums;
 using PersonalBot.Data.Models.Workflows;
 using PersonalBot.Utils;
@@ -9,16 +11,21 @@ namespace PersonalBot.Workflows.Handlers;
 
 public class IssueCommentCreatedHandler : INotificationHandler<IssueCommentCreated>
 {
-    private readonly IPublisher _publisher;
     private readonly GitHubUtils _gitHubUtils;
     private readonly IChatResolver _chatResolver;
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<IssueCommentCreatedHandler> _logger;
 
-    public IssueCommentCreatedHandler(IPublisher publisher, GitHubUtils gitHubUtils, IChatResolver chatResolver, ILogger<IssueCommentCreatedHandler> logger)
+    public IssueCommentCreatedHandler(
+        GitHubUtils gitHubUtils,
+        IChatResolver chatResolver,
+        IServiceScopeFactory scopeFactory,
+        ILogger<IssueCommentCreatedHandler> logger
+    )
     {
-        _publisher = publisher;
         _gitHubUtils = gitHubUtils;
         _chatResolver = chatResolver;
+        _scopeFactory = scopeFactory;
         _logger = logger;
     }
 
@@ -54,15 +61,17 @@ public class IssueCommentCreatedHandler : INotificationHandler<IssueCommentCreat
 
         if (isApproval)
         {
-            await _publisher.Publish(
+            using var scope = _scopeFactory.CreateScope();
+            var context = scope.ServiceProvider.GetRequiredService<BotDbContext>();
+            context.Add(
                 new TaskApproved
                 {
                     RepoPath = localRepoPath,
                     IssueNumber = notification.IssueNumber,
                     SessionId = activeSessionId,
-                },
-                cancellationToken
+                }
             );
+            await context.SaveChangesAsync(cancellationToken);
         }
         else
         {
