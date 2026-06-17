@@ -134,7 +134,7 @@ internal class OllamaChat : IAgentChat
 
     private async Task<string> GetResponse(
         AgentPhase phase,
-        Microsoft.Agents.AI.ChatClientAgent aiAgent,
+        ChatClientAgent aiAgent,
         List<ChatMessage> chatHistory,
         CancellationToken cancellationToken = default
     )

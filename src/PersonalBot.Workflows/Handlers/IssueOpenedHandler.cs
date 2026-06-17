@@ -1,6 +1,5 @@
 using Mediator;
 using Microsoft.Extensions.Logging;
-using PersonalBot.Chats.Interfaces;
 using PersonalBot.Data.Models.Enums;
 using PersonalBot.Data.Models.Workflows;
 using PersonalBot.Utils;
@@ -10,13 +9,11 @@ namespace PersonalBot.Workflows.Handlers;
 public class IssueOpenedHandler : INotificationHandler<IssueOpened>
 {
     private readonly GitHubUtils _gitHubUtils;
-    private readonly IChatResolver _chatResolver;
     private readonly ILogger<IssueOpenedHandler> _logger;
 
-    public IssueOpenedHandler(GitHubUtils gitHubUtils, IChatResolver chatResolver, ILogger<IssueOpenedHandler> logger)
+    public IssueOpenedHandler(GitHubUtils gitHubUtils, ILogger<IssueOpenedHandler> logger)
     {
         _gitHubUtils = gitHubUtils;
-        _chatResolver = chatResolver;
         _logger = logger;
     }
 
@@ -32,8 +29,6 @@ public class IssueOpenedHandler : INotificationHandler<IssueOpened>
         string localRepoPath = GitHubUtils.GetIssueRepoPath(notification.RepoName, notification.IssueNumber);
         await _gitHubUtils.EnsureRepoAsync(localRepoPath, notification.CloneUrl, notification.RepoName, notification.IssueNumber, cancellationToken);
 
-        string issueKey = $"{notification.RepoName}#{notification.IssueNumber}";
-
         var title = notification.IssueTitle ?? string.Empty;
         var body = notification.IssueBody ?? string.Empty;
 
@@ -48,23 +43,15 @@ INSTRUCTIONS:
 3. Answer with a GitHub comment for issue #{notification.IssueNumber} summarising the plan.
 4. Ask for a 👍 reaction or 'approved' comment to proceed. Do NOT write any code yet.";
 
-        _logger.LogInformation("Starting agent for issue #{issueNum}", notification.IssueNumber);
-        var agentChat = _chatResolver.ResolveCurrent();
-        (string cleanResponse, string newSessionId, string? artifactOutput) = await agentChat.GetResponseAsync(
-            new()
+        notification.ChildWorkflows.Add(
+            new ChatStarted
             {
                 RepoPath = localRepoPath,
-                IssueNum = notification.IssueNumber,
+                IssueNumber = notification.IssueNumber,
                 Prompt = prompt,
-                Phase = AgentPhase.Planning,
-            },
-            cancellationToken
+                AgentPhase = AgentPhase.Planning,
+                ChildWorkflows = [new ChatIssueReply()],
+            }
         );
-
-        var comment = !string.IsNullOrEmpty(artifactOutput) ? artifactOutput : cleanResponse;
-
-        await _gitHubUtils.PostGitHubCommentAsync(localRepoPath, notification.IssueNumber, comment, newSessionId, cancellationToken);
-
-        _logger.LogInformation("{issueKey} processing complete", issueKey);
     }
 }
