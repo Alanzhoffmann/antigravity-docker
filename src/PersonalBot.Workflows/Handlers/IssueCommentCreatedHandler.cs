@@ -1,8 +1,5 @@
 using Mediator;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using PersonalBot.Chats.Interfaces;
-using PersonalBot.Data;
 using PersonalBot.Data.Models.Enums;
 using PersonalBot.Data.Models.Workflows;
 using PersonalBot.Utils;
@@ -12,20 +9,11 @@ namespace PersonalBot.Workflows.Handlers;
 public class IssueCommentCreatedHandler : INotificationHandler<IssueCommentCreated>
 {
     private readonly GitHubUtils _gitHubUtils;
-    private readonly IChatResolver _chatResolver;
-    private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<IssueCommentCreatedHandler> _logger;
 
-    public IssueCommentCreatedHandler(
-        GitHubUtils gitHubUtils,
-        IChatResolver chatResolver,
-        IServiceScopeFactory scopeFactory,
-        ILogger<IssueCommentCreatedHandler> logger
-    )
+    public IssueCommentCreatedHandler(GitHubUtils gitHubUtils, ILogger<IssueCommentCreatedHandler> logger)
     {
         _gitHubUtils = gitHubUtils;
-        _chatResolver = chatResolver;
-        _scopeFactory = scopeFactory;
         _logger = logger;
     }
 
@@ -61,9 +49,7 @@ public class IssueCommentCreatedHandler : INotificationHandler<IssueCommentCreat
 
         if (isApproval)
         {
-            using var scope = _scopeFactory.CreateScope();
-            var context = scope.ServiceProvider.GetRequiredService<BotDbContext>();
-            context.Add(
+            notification.ChildWorkflows.Add(
                 new TaskApproved
                 {
                     RepoPath = localRepoPath,
@@ -71,30 +57,28 @@ public class IssueCommentCreatedHandler : INotificationHandler<IssueCommentCreat
                     SessionId = activeSessionId,
                 }
             );
-            await context.SaveChangesAsync(cancellationToken);
         }
         else
         {
             string execPrompt =
                 $"Feedback received on Issue #{notification.IssueNumber}: '{notification.CommentBody}'. Update the plan accordingly. Post an updated plan artifact and ask for another 👍 to proceed.";
+
             _logger.LogInformation(
                 "Feedback on #{issueNum}: '{CommentBody}'",
                 notification.IssueNumber,
                 notification.CommentBody[..Math.Min(80, notification.CommentBody.Length)]
             );
-            var agentChat = _chatResolver.ResolveCurrent();
-            var response = await agentChat.GetResponseAsync(
-                new()
+
+            notification.ChildWorkflows.Add(
+                new ChatStarted
                 {
                     RepoPath = localRepoPath,
-                    IssueNum = notification.IssueNumber,
+                    IssueNumber = notification.IssueNumber,
                     Prompt = execPrompt,
-                    Phase = AgentPhase.Planning,
-                },
-                cancellationToken
+                    AgentPhase = AgentPhase.Planning,
+                    ChildWorkflows = [new ChatIssueReply()],
+                }
             );
-            var comment = !string.IsNullOrEmpty(response.ArtifactOutput) ? response.ArtifactOutput : response.Output;
-            await _gitHubUtils.PostGitHubCommentAsync(localRepoPath, notification.IssueNumber, comment, activeSessionId, cancellationToken);
         }
     }
 }

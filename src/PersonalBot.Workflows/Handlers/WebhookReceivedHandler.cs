@@ -1,30 +1,24 @@
 using Mediator;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using PersonalBot.Data;
 using PersonalBot.Data.Models.Workflows;
 
 namespace PersonalBot.Workflows.Handlers;
 
 public class WebhookReceivedHandler : INotificationHandler<WebhookReceived>
 {
-    private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<WebhookReceivedHandler> _logger;
 
-    public WebhookReceivedHandler(IServiceScopeFactory scopeFactory, ILogger<WebhookReceivedHandler> logger)
+    public WebhookReceivedHandler(ILogger<WebhookReceivedHandler> logger)
     {
-        _scopeFactory = scopeFactory;
         _logger = logger;
     }
 
     public async ValueTask Handle(WebhookReceived notification, CancellationToken cancellationToken)
     {
-        using var scope = _scopeFactory.CreateScope();
-        var context = scope.ServiceProvider.GetRequiredService<BotDbContext>();
         switch (notification)
         {
             case { EventType: "issues", Action: "opened" }:
-                context.Add(
+                notification.ChildWorkflows.Add(
                     new IssueOpened
                     {
                         IssueNumber = notification.IssueNumber,
@@ -36,7 +30,7 @@ public class WebhookReceivedHandler : INotificationHandler<WebhookReceived>
                 );
                 break;
             case { EventType: "reaction", Action: "created" }:
-                context.Add(
+                notification.ChildWorkflows.Add(
                     new ReactionCreated
                     {
                         ReactionContent = notification.ReactionContent,
@@ -47,7 +41,7 @@ public class WebhookReceivedHandler : INotificationHandler<WebhookReceived>
                 );
                 break;
             case { EventType: "issue_comment", Action: "created" }:
-                context.Add(
+                notification.ChildWorkflows.Add(
                     new IssueCommentCreated
                     {
                         IssueNumber = notification.IssueNumber,
@@ -58,7 +52,7 @@ public class WebhookReceivedHandler : INotificationHandler<WebhookReceived>
                 );
                 break;
             case { EventType: "pull_request", Action: "closed" }:
-                context.Add(
+                notification.ChildWorkflows.Add(
                     new PullRequestClosed
                     {
                         PrMerged = notification.PrMerged,
@@ -71,7 +65,5 @@ public class WebhookReceivedHandler : INotificationHandler<WebhookReceived>
                 _logger.LogInformation("Unhandled webhook {Webhook} — no-op", notification);
                 break;
         }
-
-        await context.SaveChangesAsync(cancellationToken);
     }
 }
