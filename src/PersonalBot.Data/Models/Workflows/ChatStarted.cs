@@ -4,6 +4,7 @@ namespace PersonalBot.Data.Models.Workflows;
 
 public class ChatStarted : Workflow
 {
+    public required string RepoName { get; set; }
     public required string RepoPath { get; set; }
     public required string IssueNumber { get; set; }
     public required string Prompt { get; set; }

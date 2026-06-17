@@ -46,6 +46,7 @@ INSTRUCTIONS:
         notification.ChildWorkflows.Add(
             new ChatStarted
             {
+                RepoName = notification.RepoName,
                 RepoPath = localRepoPath,
                 IssueNumber = notification.IssueNumber,
                 Prompt = prompt,
