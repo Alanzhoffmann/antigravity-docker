@@ -33,7 +33,10 @@ public class WorkflowRunnerBackgroundService : BackgroundService
                 (
                     nextWorkflow = await context
                         .Workflows.OrderBy(w => w.CreatedAt)
-                        .FirstOrDefaultAsync(w => w.Status == WorkflowStatus.Pending, cancellationToken: stoppingToken)
+                        .FirstOrDefaultAsync(
+                            w => w.Status == WorkflowStatus.Pending && (w.ParentWorkflow == null || w.ParentWorkflow.Status == WorkflowStatus.Completed),
+                            cancellationToken: stoppingToken
+                        )
                 )
                     is not null
             )

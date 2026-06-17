@@ -10,4 +10,6 @@ public abstract class Workflow : INotification
     public WorkflowStatus Status { get; set; }
     public string? Output { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public Workflow? ParentWorkflow { get; set; }
+    public List<Workflow> ChildWorkflows { get; set; } = [];
 }
