@@ -5,7 +5,7 @@ using Microsoft.Extensions.Options;
 using PersonalBot.Chats.Interfaces;
 using PersonalBot.Chats.Models;
 using PersonalBot.Chats.Options;
-using PersonalBot.Data.Models;
+using PersonalBot.Data.Models.Enums;
 using PersonalBot.Tools;
 using PersonalBot.Utils;
 
@@ -39,9 +39,15 @@ internal partial class AgyChat : IAgentChat
 
     public string AgentName => nameof(AgyChat);
 
-    public async Task<ChatResult> GetResponseAsync(AiTask aiTask, CancellationToken cancellationToken = default)
+    public async ValueTask<ChatResult> GetResponseAsync(
+        string repoPath,
+        string prompt,
+        AgentPhase phase = AgentPhase.Planning,
+        string? session = null,
+        CancellationToken cancellationToken = default
+    )
     {
-        (string agentOutput, string? log) = await ExecuteAgyHeadless(aiTask.RepoPath, aiTask.Prompt, cancellationToken: cancellationToken);
+        (string agentOutput, string? log) = await ExecuteAgyHeadless(repoPath, prompt, cancellationToken: cancellationToken);
 
         if (string.IsNullOrEmpty(agentOutput))
         {
@@ -54,7 +60,6 @@ internal partial class AgyChat : IAgentChat
         }
 
         string newSessionId = ExtractConversationId(agentOutput);
-        _logger.LogInformation("[Processor] Issue #{issueNum} session: '{newSessionId}'", aiTask.IssueNum, newSessionId);
         string cleanResponse = GetFinalResponseFromTranscript(newSessionId);
         if (string.IsNullOrEmpty(cleanResponse))
         {

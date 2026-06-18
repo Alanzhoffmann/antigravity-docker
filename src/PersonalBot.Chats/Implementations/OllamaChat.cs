@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
+using System.Text.Json;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
@@ -8,7 +9,6 @@ using OllamaSharp;
 using PersonalBot.Chats.Interfaces;
 using PersonalBot.Chats.Models;
 using PersonalBot.Chats.Options;
-using PersonalBot.Data.Models;
 using PersonalBot.Data.Models.Enums;
 using PersonalBot.Tools;
 using PersonalBot.Tools.Factories;
@@ -52,58 +52,51 @@ internal class OllamaChat : IAgentChat
 
     public int SortOrder => 1;
 
-    public async Task<ChatResult> GetResponseAsync(AiTask aiTask, CancellationToken cancellationToken = default)
+    public async ValueTask<ChatResult> GetResponseAsync(
+        string repoPath,
+        string prompt,
+        AgentPhase phase = AgentPhase.Planning,
+        string? session = null,
+        CancellationToken cancellationToken = default
+    )
     {
         if (!IsEnabled)
         {
             _logger.LogWarning("OllamaChat is not enabled due to missing configuration. Model: '{Model}', Url: '{Url}'", Model, Url);
-            return new ChatResult("OllamaChat is not configured properly. Please check the logs for details.", aiTask.IssueNum, null);
+            throw new InvalidOperationException("OllamaChat is not configured properly. Please check the logs for details.");
         }
 
-        var repositoryTools = await _repositoryToolsFactory.CreateAsync(aiTask.RepoPath);
-        using var roslynAgentTools = await _roslynAgentToolsFactory.CreateAsync(aiTask.RepoPath);
+        var repositoryTools = await _repositoryToolsFactory.CreateAsync(repoPath);
+        using var roslynAgentTools = await _roslynAgentToolsFactory.CreateAsync(repoPath);
 
         var client = _httpClientFactory.CreateClient(nameof(OllamaChat));
         using IChatClient ollamaClient = new OllamaApiClient(client, Model);
-        string systemInstructions = GetInstructions(aiTask.Phase);
+        string systemInstructions = GetInstructions(phase);
 
         var aiAgent = ollamaClient.AsAIAgent(instructions: systemInstructions, tools: [.. repositoryTools.Tools, .. roslynAgentTools.Tools]);
 
-        var session = await aiAgent.CreateSessionAsync(cancellationToken);
-        var serializedSession = await aiAgent.SerializeSessionAsync(session, cancellationToken: cancellationToken);
-
-        _logger.LogInformation("This is in new serializedSession: {serializedSession}", serializedSession);
-
-        // Start the conversation with context for the AI model
-        if (!_conversationHistories.TryGetValue(aiTask.IssueNum, out var chatHistory))
+        AgentSession agentSession;
+        if (!string.IsNullOrEmpty(session))
         {
-            chatHistory = [];
-            _conversationHistories[aiTask.IssueNum] = chatHistory;
+            var jsonState = JsonSerializer.Deserialize<JsonElement>(session);
+            agentSession = await aiAgent.DeserializeSessionAsync(jsonState, cancellationToken: cancellationToken);
+        }
+        else
+        {
+            agentSession = await aiAgent.CreateSessionAsync(cancellationToken);
         }
 
-        session.SetInMemoryChatHistory(chatHistory);
+        if (!agentSession.TryGetInMemoryChatHistory(out var chatHistory))
+        {
+            chatHistory = [];
+        }
 
-        serializedSession = await aiAgent.SerializeSessionAsync(session, cancellationToken: cancellationToken);
-        _logger.LogInformation("This is in serializedSession with chat history: {serializedSession}", serializedSession);
+        chatHistory.Add(new ChatMessage(ChatRole.User, prompt));
 
-        // Get user prompt and add to chat history
-        _logger.LogInformation("User prompt for issue #{issueNum}: '{prompt}'", aiTask.IssueNum, aiTask.Prompt);
-        chatHistory.Add(new ChatMessage(ChatRole.User, aiTask.Prompt));
+        string response = await GetResponse(phase, aiAgent, chatHistory, agentSession, cancellationToken);
 
-        // Stream the AI response and add to chat history
-        _logger.LogInformation("Streaming response for issue #{issueNum}", aiTask.IssueNum);
-        string response = await GetResponse(aiTask.Phase, aiAgent, chatHistory, cancellationToken);
-
-        _logger.LogInformation("Full response for issue #{issueNum}: '{response}'", aiTask.IssueNum, response);
-
-        serializedSession = await aiAgent.SerializeSessionAsync(session, cancellationToken: cancellationToken);
-        _logger.LogInformation("This is in serializedSession after response: {serializedSession}", serializedSession);
-
-        chatHistory.Add(new ChatMessage(ChatRole.Assistant, response));
-
-        serializedSession = await aiAgent.SerializeSessionAsync(session, cancellationToken: cancellationToken);
-        _logger.LogInformation("This is in serializedSession after response added to chat history: {serializedSession}", serializedSession);
-        return new ChatResult(response, aiTask.IssueNum, await _artifactParser.TryReadPlanArtifact(aiTask.RepoPath));
+        var serializedSession = await aiAgent.SerializeSessionAsync(agentSession, cancellationToken: cancellationToken);
+        return new ChatResult(response, serializedSession.ToString(), await _artifactParser.TryReadPlanArtifact(repoPath));
     }
 
     private static string GetInstructions(AgentPhase phase) =>
@@ -136,42 +129,81 @@ internal class OllamaChat : IAgentChat
         AgentPhase phase,
         ChatClientAgent aiAgent,
         List<ChatMessage> chatHistory,
+        AgentSession agentSession,
         CancellationToken cancellationToken = default
     )
     {
-        int maxAttempts = phase is AgentPhase.Execution ? 2 : 1;
-        StringBuilder output = new();
+        int maxAttempts = 3; // Allow the AI a few tries to get it right
         string response = string.Empty;
 
         for (int attempt = 1; attempt <= maxAttempts; attempt++)
         {
-            output = output.Clear();
-            await foreach (var item in aiAgent.RunStreamingAsync(chatHistory, cancellationToken: cancellationToken))
+            StringBuilder output = new();
+
+            // 1. Generate the response
+            await foreach (var item in aiAgent.RunStreamingAsync(chatHistory, agentSession, cancellationToken: cancellationToken))
             {
                 output.Append(item.Text);
             }
 
             response = output.ToString();
 
-            // --- EXECUTION SAFETY NET ---
-            if (phase == AgentPhase.Execution)
+            // 2. Validate the output (Replace with your actual validation logic)
+            bool isValid = TryValidateOutput(phase, response, out string validationError);
+
+            if (isValid)
             {
-                if (response.Length < 100 && (response.Contains("I will") || response.Contains("working on")))
-                {
-                    _logger.LogWarning("Execution agent gave a lazy response. Forcing correction.");
-
-                    chatHistory.Add(new ChatMessage(ChatRole.Assistant, response));
-                    chatHistory.Add(
-                        new ChatMessage(ChatRole.User, "SYSTEM ERROR: Do not converse. Use `RunBashCommand` or Roslyn tools immediately to execute the plan.")
-                    );
-
-                    continue;
-                }
+                // Success! Break out of the retry loop.
+                break;
             }
 
-            break;
+            // 3. Handle Failure: Feed the error back to the AI
+            _logger.LogWarning("Validation failed on attempt {Attempt}. Error: {Error}", attempt, validationError);
+
+            if (attempt == maxAttempts)
+            {
+                // If we've exhausted our attempts, NOW we throw to the outer workflow.
+                throw new InvalidOperationException($"AI failed to produce valid output after {maxAttempts} attempts. Last error: {validationError}");
+            }
+
+            // Inject the feedback into the chat history so the AI learns from its mistake
+            // Note: The assistant's bad response was already added to the session by RunStreamingAsync.
+            // We just need to add the user's correction prompt.
+            string correctionPrompt =
+                $"SYSTEM ERROR: Your previous output failed validation with the following error:\n{validationError}\n\nPlease correct the mistake and try again.";
+
+            chatHistory.Add(new ChatMessage(ChatRole.User, correctionPrompt));
+
+            // The loop restarts, calling RunStreamingAsync again with the updated history!
         }
 
         return response;
+    }
+
+    // A stub for your validation logic
+    private static bool TryValidateOutput(AgentPhase phase, string response, out string errorMessage)
+    {
+        errorMessage = string.Empty;
+
+        if (phase == AgentPhase.Planning)
+        {
+            // Example: Ensure the plan contains a specific markdown structure
+            if (!response.Contains("```markdown"))
+            {
+                errorMessage = "The plan must be formatted as a markdown code block.";
+                return false;
+            }
+        }
+        else if (phase == AgentPhase.Execution)
+        {
+            // Example: Ensure no conversational text leaked through
+            if (response.Contains("I will") || response.Contains("Here is"))
+            {
+                errorMessage = "Do not use conversational text. Execute the tools silently.";
+                return false;
+            }
+        }
+
+        return true; // Output is good
     }
 }

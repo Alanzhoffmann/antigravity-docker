@@ -1,5 +1,6 @@
 using PersonalBot.Chats.Models;
 using PersonalBot.Data.Models;
+using PersonalBot.Data.Models.Enums;
 
 namespace PersonalBot.Chats.Interfaces;
 
@@ -8,7 +9,15 @@ public interface IAgentChat
     bool IsEnabled { get; }
     string AgentName { get; }
     int SortOrder => 0; // Default sort order for agent chats, can be overridden by implementations
-    Task<ChatResult> GetResponseAsync(AiTask aiTask, CancellationToken cancellationToken = default);
+    ValueTask<ChatResult> GetResponseAsync(
+        string repoPath,
+        string prompt,
+        AgentPhase phase = AgentPhase.Planning,
+        string? session = null,
+        CancellationToken cancellationToken = default
+    );
+    async ValueTask<ChatResult> GetResponseAsync(AiTask aiTask, CancellationToken cancellationToken = default) =>
+        await GetResponseAsync(aiTask.RepoPath, aiTask.Prompt, aiTask.Phase, aiTask.Session, cancellationToken);
 }
 
 internal class NullChat : IAgentChat
@@ -19,9 +28,11 @@ internal class NullChat : IAgentChat
 
     public string AgentName => nameof(NullChat);
 
-    public Task<ChatResult> GetResponseAsync(AiTask aiTask, CancellationToken cancellationToken = default)
-    {
-        // TODO throw when retries are implemented
-        return Task.FromResult(new ChatResult("No agent chat implementations are enabled. Please check the configuration.", aiTask.IssueNum, null));
-    }
+    public ValueTask<ChatResult> GetResponseAsync(
+        string repoPath,
+        string prompt,
+        AgentPhase phase = AgentPhase.Planning,
+        string? session = null,
+        CancellationToken cancellationToken = default
+    ) => throw new InvalidOperationException("No agent chat implementations are enabled. Please check the configuration.");
 }
