@@ -22,13 +22,10 @@ public class ChatStartedHandler : INotificationHandler<ChatStarted>
 
         var agentChat = _chatResolver.ResolveCurrent();
         var response = await agentChat.GetResponseAsync(
-            new()
-            {
-                RepoPath = notification.RepoPath,
-                IssueNum = notification.IssueNumber,
-                Prompt = notification.Prompt,
-                Phase = notification.AgentPhase,
-            },
+            notification.RepoPath,
+            notification.Prompt,
+            notification.AgentPhase,
+            notification.Session,
             cancellationToken
         );
 

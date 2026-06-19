@@ -22,28 +22,15 @@ public class TaskApprovedHandler : INotificationHandler<TaskApproved>
 
     public async ValueTask Handle(TaskApproved notification, CancellationToken cancellationToken)
     {
-        _logger.LogInformation(
-            "Plan approved for issue #{issueNum} (session={sessionId}) — starting implementation",
-            notification.IssueNumber,
-            notification.SessionId
-        );
+        _logger.LogInformation("Plan approved for issue #{issueNum} — starting implementation", notification.IssueNumber);
 
         string prompt =
             $"The plan for Issue #{notification.IssueNumber} has been approved. Create branch 'fix/issue-{notification.IssueNumber}', implement the code changes, run any available local tests, and raise a PR via `gh pr create`. Commit only changes related to this issue.";
 
         var agentChat = _chatResolver.ResolveCurrent();
-        string response = await agentChat.GetResponseAsync(
-            new()
-            {
-                RepoPath = notification.RepoPath,
-                IssueNum = notification.IssueNumber,
-                Prompt = prompt,
-                Phase = AgentPhase.Execution,
-            },
-            cancellationToken
-        );
+        string response = await agentChat.GetResponseAsync(notification.RepoPath, prompt, AgentPhase.Execution, notification.Session, cancellationToken);
 
-        await _gitHubUtils.PostGitHubCommentAsync(notification.RepoPath, notification.IssueNumber, response, notification.SessionId, cancellationToken);
+        await _gitHubUtils.PostGitHubCommentAsync(notification.RepoPath, notification.IssueNumber, response, string.Empty, cancellationToken);
         _logger.LogInformation("Implementation complete for issue #{issueNum}", notification.IssueNumber);
     }
 }

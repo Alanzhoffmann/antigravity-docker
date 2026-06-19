@@ -1,4 +1,5 @@
 using Mediator;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using PersonalBot.Data;
@@ -32,19 +33,24 @@ public class ReactionCreatedHandler : INotificationHandler<ReactionCreated>
             }
             string localRepoPath = GitHubUtils.GetIssueRepoPath(notification.RepoName, notification.IssueNumber);
             await _gitHubUtils.EnsureRepoAsync(localRepoPath, notification.CloneUrl, notification.RepoName, notification.IssueNumber, cancellationToken);
-            var sid = await _gitHubUtils.GetSessionIdFromIssueAsync(localRepoPath, notification.IssueNumber, cancellationToken);
 
             using var scope = _scopeFactory.CreateScope();
-            var context = scope.ServiceProvider.GetRequiredService<BotDbContext>();
-            context.Add(
+            var dbContext = scope.ServiceProvider.GetRequiredService<BotDbContext>();
+            var existingSession = await dbContext
+                .Set<ChatStarted>()
+                .OrderByDescending(w => w.CreatedAt)
+                .Where(w => w.IssueNumber == notification.IssueNumber)
+                .Select(w => w.Session)
+                .FirstOrDefaultAsync(cancellationToken: cancellationToken);
+
+            notification.ChildWorkflows.Add(
                 new TaskApproved
                 {
                     RepoPath = localRepoPath,
                     IssueNumber = notification.IssueNumber,
-                    SessionId = sid,
+                    Session = existingSession,
                 }
             );
-            await context.SaveChangesAsync(cancellationToken);
         }
     }
 }

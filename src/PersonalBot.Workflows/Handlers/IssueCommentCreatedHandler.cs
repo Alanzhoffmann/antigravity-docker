@@ -1,5 +1,8 @@
 using Mediator;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using PersonalBot.Data;
 using PersonalBot.Data.Models.Enums;
 using PersonalBot.Data.Models.Workflows;
 using PersonalBot.Utils;
@@ -9,11 +12,13 @@ namespace PersonalBot.Workflows.Handlers;
 public class IssueCommentCreatedHandler : INotificationHandler<IssueCommentCreated>
 {
     private readonly GitHubUtils _gitHubUtils;
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<IssueCommentCreatedHandler> _logger;
 
-    public IssueCommentCreatedHandler(GitHubUtils gitHubUtils, ILogger<IssueCommentCreatedHandler> logger)
+    public IssueCommentCreatedHandler(GitHubUtils gitHubUtils, IServiceScopeFactory scopeFactory, ILogger<IssueCommentCreatedHandler> logger)
     {
         _gitHubUtils = gitHubUtils;
+        _scopeFactory = scopeFactory;
         _logger = logger;
     }
 
@@ -34,13 +39,14 @@ public class IssueCommentCreatedHandler : INotificationHandler<IssueCommentCreat
         string localRepoPath = GitHubUtils.GetIssueRepoPath(notification.RepoName, notification.IssueNumber);
         await _gitHubUtils.EnsureRepoAsync(localRepoPath, notification.CloneUrl, notification.RepoName, notification.IssueNumber, cancellationToken);
 
-        var activeSessionId = await _gitHubUtils.GetSessionIdFromIssueAsync(localRepoPath, notification.IssueNumber, cancellationToken);
-        _logger.LogInformation("issue_comment #{issueNum} activeSession='{activeSessionId}'", notification.IssueNumber, activeSessionId);
-        if (string.IsNullOrEmpty(activeSessionId))
-        {
-            _logger.LogWarning("No active session for #{issueNum}", notification.IssueNumber);
-            return;
-        }
+        using var scope = _scopeFactory.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<BotDbContext>();
+        var existingSession = await dbContext
+            .Set<ChatStarted>()
+            .OrderByDescending(w => w.CreatedAt)
+            .Where(w => w.IssueNumber == notification.IssueNumber)
+            .Select(w => w.Session)
+            .FirstOrDefaultAsync(cancellationToken: cancellationToken);
 
         bool isApproval =
             notification.CommentBody.Trim() == "👍"
@@ -54,7 +60,7 @@ public class IssueCommentCreatedHandler : INotificationHandler<IssueCommentCreat
                 {
                     RepoPath = localRepoPath,
                     IssueNumber = notification.IssueNumber,
-                    SessionId = activeSessionId,
+                    Session = existingSession,
                 }
             );
         }
@@ -77,6 +83,7 @@ public class IssueCommentCreatedHandler : INotificationHandler<IssueCommentCreat
                     IssueNumber = notification.IssueNumber,
                     Prompt = execPrompt,
                     AgentPhase = AgentPhase.Planning,
+                    Session = existingSession,
                     ChildWorkflows = [new ChatIssueReply()],
                 }
             );

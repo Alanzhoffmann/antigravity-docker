@@ -16,8 +16,6 @@ public interface IAgentChat
         string? session = null,
         CancellationToken cancellationToken = default
     );
-    async ValueTask<ChatResult> GetResponseAsync(AiTask aiTask, CancellationToken cancellationToken = default) =>
-        await GetResponseAsync(aiTask.RepoPath, aiTask.Prompt, aiTask.Phase, aiTask.Session, cancellationToken);
 }
 
 internal class NullChat : IAgentChat
