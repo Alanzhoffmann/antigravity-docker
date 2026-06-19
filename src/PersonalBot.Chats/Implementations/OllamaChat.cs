@@ -12,6 +12,7 @@ using PersonalBot.Chats.Options;
 using PersonalBot.Data.Models.Enums;
 using PersonalBot.Tools;
 using PersonalBot.Tools.Factories;
+using PersonalBot.Utils;
 
 namespace PersonalBot.Chats.Implementations;
 
@@ -24,6 +25,7 @@ internal class OllamaChat : IAgentChat
     private readonly Dictionary<string, List<ChatMessage>> _conversationHistories = [];
     private readonly RepositoryToolsFactory _repositoryToolsFactory;
     private readonly RoslynAgentToolsFactory _roslynAgentToolsFactory;
+    private readonly GitHubUtils _gitHubUtils;
 
     public OllamaChat(
         IOptionsMonitor<OllamaOptions> optionsMonitor,
@@ -31,6 +33,7 @@ internal class OllamaChat : IAgentChat
         ArtifactParser artifactParser,
         RepositoryToolsFactory repositoryToolsFactory,
         RoslynAgentToolsFactory roslynAgentToolsFactory,
+        GitHubUtils gitHubUtils,
         ILogger<OllamaChat> logger
     )
     {
@@ -40,6 +43,7 @@ internal class OllamaChat : IAgentChat
         _logger = logger;
         _repositoryToolsFactory = repositoryToolsFactory;
         _roslynAgentToolsFactory = roslynAgentToolsFactory;
+        _gitHubUtils = gitHubUtils;
     }
 
     private string? Model => _optionsMonitor.CurrentValue.Model;
@@ -93,7 +97,7 @@ internal class OllamaChat : IAgentChat
 
         chatHistory.Add(new ChatMessage(ChatRole.User, prompt));
 
-        string response = await GetResponse(phase, aiAgent, chatHistory, agentSession, cancellationToken);
+        string response = await GetResponse(phase, repoPath, aiAgent, chatHistory, agentSession, cancellationToken);
 
         var serializedSession = await aiAgent.SerializeSessionAsync(agentSession, cancellationToken: cancellationToken);
         return new ChatResult(response, serializedSession.ToString(), await _artifactParser.TryReadPlanArtifact(repoPath));
@@ -127,6 +131,7 @@ internal class OllamaChat : IAgentChat
 
     private async Task<string> GetResponse(
         AgentPhase phase,
+        string repoPath,
         ChatClientAgent aiAgent,
         List<ChatMessage> chatHistory,
         AgentSession agentSession,
@@ -148,13 +153,12 @@ internal class OllamaChat : IAgentChat
 
             response = output.ToString();
 
-            // 2. Validate the output (Replace with your actual validation logic)
-            bool isValid = TryValidateOutput(phase, response, out string validationError);
+            // 2. Await the new async validation logic
+            var (isValid, validationError) = await TryValidateOutputAsync(phase, response, repoPath, cancellationToken);
 
             if (isValid)
             {
-                // Success! Break out of the retry loop.
-                break;
+                break; // Success! Exit the retry loop.
             }
 
             // 3. Handle Failure: Feed the error back to the AI
@@ -172,7 +176,7 @@ internal class OllamaChat : IAgentChat
             string correctionPrompt =
                 $"SYSTEM ERROR: Your previous output failed validation with the following error:\n{validationError}\n\nPlease correct the mistake and try again.";
 
-            chatHistory.Add(new ChatMessage(ChatRole.User, correctionPrompt));
+            chatHistory.Add(new ChatMessage(ChatRole.System, correctionPrompt));
 
             // The loop restarts, calling RunStreamingAsync again with the updated history!
         }
@@ -180,30 +184,43 @@ internal class OllamaChat : IAgentChat
         return response;
     }
 
-    // A stub for your validation logic
-    private static bool TryValidateOutput(AgentPhase phase, string response, out string errorMessage)
+    private async Task<(bool IsValid, string ErrorMessage)> TryValidateOutputAsync(
+        AgentPhase phase,
+        string response,
+        string repoPath,
+        CancellationToken cancellationToken
+    )
     {
-        errorMessage = string.Empty;
-
         if (phase == AgentPhase.Planning)
         {
-            // Example: Ensure the plan contains a specific markdown structure
-            if (!response.Contains("```markdown"))
+            // Check if the AI actually created the file
+            string planContent = await _artifactParser.TryReadPlanArtifact(repoPath, cancellationToken);
+
+            if (string.IsNullOrWhiteSpace(planContent))
             {
-                errorMessage = "The plan must be formatted as a markdown code block.";
-                return false;
+                return (
+                    false,
+                    "You failed to generate the 'implementation_plan.md' artifact. You must use your tools to write the markdown file to the workspace before completing your turn."
+                );
             }
         }
         else if (phase == AgentPhase.Execution)
         {
-            // Example: Ensure no conversational text leaked through
-            if (response.Contains("I will") || response.Contains("Here is"))
+            // 1. Check for lazy conversational text
+            // if (response.Length < 100 && (response.Contains("I will") || response.Contains("working on")))
+            // {
+            //     return (false, "Do not use conversational text. You must use `RunBashCommand` or Roslyn tools immediately to execute the plan.");
+            // }
+
+            // 2. Check if commits were actually made using your new method
+            int commitsAhead = await _gitHubUtils.GetCommitsAheadOfMainAsync(repoPath, "main", cancellationToken);
+
+            if (commitsAhead == 0)
             {
-                errorMessage = "Do not use conversational text. Execute the tools silently.";
-                return false;
+                return (false, "Execution failed. No commits were added to the branch. You must modify the code and commit your changes using the bash tools.");
             }
         }
 
-        return true; // Output is good
+        return (true, string.Empty);
     }
 }

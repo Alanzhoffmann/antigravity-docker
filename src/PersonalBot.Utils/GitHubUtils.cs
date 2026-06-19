@@ -32,8 +32,7 @@ public partial class GitHubUtils
         }
         else
         {
-            _logger.LogInformation("Pulling latest in '{localRepoPath}'", localRepoPath);
-            await _processUtils.RunProcessAsync("git", ["pull"], localRepoPath, cancellationToken);
+            await RebaseOntoMainAsync(localRepoPath, cancellationToken: cancellationToken);
         }
     }
 
@@ -56,6 +55,66 @@ public partial class GitHubUtils
         var sessionId = match.Success ? match.Groups[1].Value : null;
         _logger.LogInformation("Session ID for issue #{issueNum}: '{sessionId}'", issueNum, string.IsNullOrEmpty(sessionId) ? "none" : sessionId);
         return sessionId;
+    }
+
+    public async Task<int> GetCommitsAheadOfMainAsync(string repoPath, string baseBranch = "main", CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation("Checking commits ahead of '{BaseBranch}' in '{RepoPath}'", baseBranch, repoPath);
+
+        try
+        {
+            // 'git rev-list --count main..HEAD' returns exactly how many commits HEAD has that main doesn't.
+            string output = await _processUtils.RunProcessAsync("git", ["rev-list", "--count", $"{baseBranch}..HEAD"], repoPath, cancellationToken);
+
+            if (int.TryParse(output.Trim(), out int count))
+            {
+                _logger.LogInformation("Branch is {Count} commit(s) ahead of {BaseBranch}.", count, baseBranch);
+                return count;
+            }
+
+            _logger.LogWarning("Could not parse commit count from output: '{Output}'", output);
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to check commits ahead of {BaseBranch}. Are you on a valid branch?", baseBranch);
+            return 0;
+        }
+    }
+
+    public async Task RebaseOntoMainAsync(string repoPath, string baseBranch = "main", CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation("Fetching latest '{BaseBranch}' and rebasing current branch in '{RepoPath}'", baseBranch, repoPath);
+
+        try
+        {
+            // 1. We MUST fetch from origin first since you mentioned 'main' was updated separately (remotely)
+            await _processUtils.RunProcessAsync("git", ["fetch", "origin", baseBranch], repoPath, cancellationToken);
+
+            // 2. Rebase onto the newly fetched remote branch
+            await _processUtils.RunProcessAsync("git", ["rebase", $"origin/{baseBranch}"], repoPath, cancellationToken);
+
+            _logger.LogInformation("Successfully rebased onto origin/{BaseBranch}.", baseBranch);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Rebase onto {BaseBranch} failed (likely due to a merge conflict). Aborting rebase to protect workspace state.", baseBranch);
+
+            // --- CRITICAL SAFETY NET ---
+            // If rebase fails, Git freezes the repo in a "rebasing" state. We must abort so the agent doesn't get permanently stuck.
+            try
+            {
+                await _processUtils.RunProcessAsync("git", ["rebase", "--abort"], repoPath, cancellationToken);
+                _logger.LogInformation("Rebase aborted successfully. Workspace restored to previous state.");
+            }
+            catch (Exception abortEx)
+            {
+                _logger.LogCritical(abortEx, "Failed to abort rebase! The repository at {RepoPath} requires manual intervention.", repoPath);
+            }
+
+            // Throw so the calling execution workflow knows the rebase failed and doesn't proceed blindly
+            throw new InvalidOperationException($"Failed to rebase onto {baseBranch}. See logs for details.", ex);
+        }
     }
 
     public static string GetIssueRepoPath(string repoName, string issueNum) => $"{WorkspaceBase}/{repoName}-issue-{issueNum}";
