@@ -3,7 +3,7 @@ using PersonalBot.Data.Models.Enums;
 
 namespace PersonalBot.Data.Models.Workflows;
 
-public abstract class Workflow : INotification
+public abstract class Workflow : IRequest
 {
     public Guid Id { get; set; }
     public int RetryCount { get; set; }

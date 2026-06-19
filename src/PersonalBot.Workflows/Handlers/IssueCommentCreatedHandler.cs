@@ -6,7 +6,7 @@ using PersonalBot.Utils;
 
 namespace PersonalBot.Workflows.Handlers;
 
-public class IssueCommentCreatedHandler : INotificationHandler<IssueCommentCreated>
+public class IssueCommentCreatedHandler : IRequestHandler<IssueCommentCreated>
 {
     private readonly GitHubUtils _gitHubUtils;
     private readonly IServiceScopeFactory _scopeFactory;
@@ -19,36 +19,36 @@ public class IssueCommentCreatedHandler : INotificationHandler<IssueCommentCreat
         _logger = logger;
     }
 
-    public ValueTask Handle(IssueCommentCreated notification, CancellationToken cancellationToken)
+    public ValueTask<Unit> Handle(IssueCommentCreated request, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrEmpty(notification.IssueNumber) || string.IsNullOrEmpty(notification.CommentBody))
+        if (string.IsNullOrEmpty(request.IssueNumber) || string.IsNullOrEmpty(request.CommentBody))
         {
             _logger.LogWarning($"issue_comment missing issue.number or comment.body");
-            return ValueTask.CompletedTask;
+            return Unit.ValueTask;
         }
 
-        if (GitHubUtils.IsOwnComment(notification.CommentBody))
+        if (GitHubUtils.IsOwnComment(request.CommentBody))
         {
             _logger.LogInformation($"Skipping Bot comment to prevent loop");
-            return ValueTask.CompletedTask;
+            return Unit.ValueTask;
         }
 
         bool isApproval =
-            notification.CommentBody.Trim() == "👍"
-            || notification.CommentBody.Trim().Equals("lgtm", StringComparison.OrdinalIgnoreCase)
-            || notification.CommentBody.Trim().Equals("approved", StringComparison.OrdinalIgnoreCase);
+            request.CommentBody.Trim() == "👍"
+            || request.CommentBody.Trim().Equals("lgtm", StringComparison.OrdinalIgnoreCase)
+            || request.CommentBody.Trim().Equals("approved", StringComparison.OrdinalIgnoreCase);
 
-        notification.ChildWorkflows.Add(
+        request.ChildWorkflows.Add(
             isApproval
-                ? new TaskApproved { IssueNumber = notification.IssueNumber, RepoName = notification.RepoName }
+                ? new TaskApproved { IssueNumber = request.IssueNumber, RepoName = request.RepoName }
                 : new FeedbackReceived
                 {
-                    IssueNumber = notification.IssueNumber,
-                    RepoName = notification.RepoName,
-                    CommentBody = notification.CommentBody,
+                    IssueNumber = request.IssueNumber,
+                    RepoName = request.RepoName,
+                    CommentBody = request.CommentBody,
                 }
         );
 
-        return ValueTask.CompletedTask;
+        return Unit.ValueTask;
     }
 }

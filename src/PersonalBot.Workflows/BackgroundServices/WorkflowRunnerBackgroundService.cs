@@ -12,13 +12,13 @@ namespace PersonalBot.Workflows.BackgroundServices;
 public class WorkflowRunnerBackgroundService : BackgroundService
 {
     private readonly IServiceScopeFactory _serviceScopeFactory;
-    private readonly IPublisher _publisher;
+    private readonly IMediator _mediator;
     private readonly ILogger<WorkflowRunnerBackgroundService> _logger;
 
-    public WorkflowRunnerBackgroundService(IServiceScopeFactory serviceScopeFactory, IPublisher publisher, ILogger<WorkflowRunnerBackgroundService> logger)
+    public WorkflowRunnerBackgroundService(IServiceScopeFactory serviceScopeFactory, IMediator mediator, ILogger<WorkflowRunnerBackgroundService> logger)
     {
         _serviceScopeFactory = serviceScopeFactory;
-        _publisher = publisher;
+        _mediator = mediator;
         _logger = logger;
     }
 
@@ -47,7 +47,7 @@ public class WorkflowRunnerBackgroundService : BackgroundService
                     _logger.LogInformation("Running workflow {Workflow}", nextWorkflow);
                     nextWorkflow.Status = WorkflowStatus.Running;
                     await context.SaveChangesAsync(stoppingToken);
-                    await _publisher.Publish(nextWorkflow, stoppingToken);
+                    await _mediator.Send(nextWorkflow, stoppingToken);
                     nextWorkflow.Status = WorkflowStatus.Completed;
                 }
                 catch (Exception ex)
@@ -65,7 +65,7 @@ public class WorkflowRunnerBackgroundService : BackgroundService
                 }
                 finally
                 {
-                    await context.SaveChangesAsync(stoppingToken);
+                    await context.SaveChangesAsync(CancellationToken.None);
                 }
             }
 

@@ -5,7 +5,7 @@ using PersonalBot.Data.Models.Workflows;
 
 namespace PersonalBot.Workflows.Handlers;
 
-public class FeedbackReceivedHandler : INotificationHandler<FeedbackReceived>
+public class FeedbackReceivedHandler : IRequestHandler<FeedbackReceived>
 {
     private readonly ILogger<FeedbackReceived> _logger;
 
@@ -14,28 +14,28 @@ public class FeedbackReceivedHandler : INotificationHandler<FeedbackReceived>
         _logger = logger;
     }
 
-    public ValueTask Handle(FeedbackReceived notification, CancellationToken cancellationToken)
+    public ValueTask<Unit> Handle(FeedbackReceived request, CancellationToken cancellationToken)
     {
         string execPrompt =
-            $"Feedback received on Issue #{notification.IssueNumber}: '{notification.CommentBody}'. Update the plan accordingly. Post an updated plan artifact and ask for another 👍 to proceed.";
+            $"Feedback received on Issue #{request.IssueNumber}: '{request.CommentBody}'. Update the plan accordingly. Post an updated plan artifact and ask for another 👍 to proceed.";
 
         _logger.LogInformation(
             "Feedback on #{issueNum}: '{CommentBody}'",
-            notification.IssueNumber,
-            notification.CommentBody[..Math.Min(80, notification.CommentBody.Length)]
+            request.IssueNumber,
+            request.CommentBody[..Math.Min(80, request.CommentBody.Length)]
         );
 
-        notification.ChildWorkflows.Add(
+        request.ChildWorkflows.Add(
             new ChatStarted
             {
-                RepoName = notification.RepoName,
-                IssueNumber = notification.IssueNumber,
+                RepoName = request.RepoName,
+                IssueNumber = request.IssueNumber,
                 Prompt = execPrompt,
                 AgentPhase = AgentPhase.Planning,
                 ChildWorkflows = [new ChatIssueReply()],
             }
         );
 
-        return ValueTask.CompletedTask;
+        return Unit.ValueTask;
     }
 }

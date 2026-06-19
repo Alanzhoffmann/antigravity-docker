@@ -5,7 +5,7 @@ using PersonalBot.Data.Models.Workflows;
 
 namespace PersonalBot.Workflows.Handlers;
 
-public class IssueOpenedHandler : INotificationHandler<IssueOpened>
+public class IssueOpenedHandler : IRequestHandler<IssueOpened>
 {
     private readonly ILogger<IssueOpenedHandler> _logger;
 
@@ -14,39 +14,39 @@ public class IssueOpenedHandler : INotificationHandler<IssueOpened>
         _logger = logger;
     }
 
-    public ValueTask Handle(IssueOpened notification, CancellationToken cancellationToken)
+    public ValueTask<Unit> Handle(IssueOpened request, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrEmpty(notification.IssueNumber))
+        if (string.IsNullOrEmpty(request.IssueNumber))
         {
             _logger.LogWarning($"issues/opened missing issue.number");
-            return ValueTask.CompletedTask;
+            return Unit.ValueTask;
         }
 
-        var title = notification.IssueTitle ?? string.Empty;
-        var body = notification.IssueBody ?? string.Empty;
+        var title = request.IssueTitle ?? string.Empty;
+        var body = request.IssueBody ?? string.Empty;
 
         string prompt =
-            $@"Analyze Issue #{notification.IssueNumber}: {title}
+            $@"Analyze Issue #{request.IssueNumber}: {title}
 
 {body}
 
 INSTRUCTIONS:
 1. Formulate a detailed implementation plan.
 2. Write it to an artifact file called 'implementation_plan.md' (ArtifactType=implementation_plan). This is mandatory.
-3. Answer with a GitHub comment for issue #{notification.IssueNumber} summarising the plan.
+3. Answer with a GitHub comment for issue #{request.IssueNumber} summarising the plan.
 4. Ask for a 👍 reaction or 'approved' comment to proceed. Do NOT write any code yet.";
 
-        notification.ChildWorkflows.Add(
+        request.ChildWorkflows.Add(
             new ChatStarted
             {
-                RepoName = notification.RepoName,
-                IssueNumber = notification.IssueNumber,
+                RepoName = request.RepoName,
+                IssueNumber = request.IssueNumber,
                 Prompt = prompt,
                 AgentPhase = AgentPhase.Planning,
                 ChildWorkflows = [new ChatIssueReply()],
             }
         );
 
-        return ValueTask.CompletedTask;
+        return Unit.ValueTask;
     }
 }

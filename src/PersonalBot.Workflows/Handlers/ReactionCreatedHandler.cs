@@ -4,7 +4,7 @@ using PersonalBot.Data.Models.Workflows;
 
 namespace PersonalBot.Workflows.Handlers;
 
-public class ReactionCreatedHandler : INotificationHandler<ReactionCreated>
+public class ReactionCreatedHandler : IRequestHandler<ReactionCreated>
 {
     private readonly ILogger<ReactionCreatedHandler> _logger;
 
@@ -13,22 +13,22 @@ public class ReactionCreatedHandler : INotificationHandler<ReactionCreated>
         _logger = logger;
     }
 
-    public ValueTask Handle(ReactionCreated notification, CancellationToken cancellationToken)
+    public ValueTask<Unit> Handle(ReactionCreated request, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("Reaction event: content='{ReactionContent}'", notification.ReactionContent);
-        if (notification.ReactionContent != "+1" && notification.ReactionContent != "👍")
+        _logger.LogInformation("Reaction event: content='{ReactionContent}'", request.ReactionContent);
+        if (request.ReactionContent != "+1" && request.ReactionContent != "👍")
         {
-            return ValueTask.CompletedTask;
+            return Unit.ValueTask;
         }
 
-        if (string.IsNullOrEmpty(notification.IssueNumber))
+        if (string.IsNullOrEmpty(request.IssueNumber))
         {
             _logger.LogWarning($"reaction event missing issue.number");
-            return ValueTask.CompletedTask;
+            return Unit.ValueTask;
         }
 
-        notification.ChildWorkflows.Add(new TaskApproved { IssueNumber = notification.IssueNumber, RepoName = notification.RepoName });
+        request.ChildWorkflows.Add(new TaskApproved { IssueNumber = request.IssueNumber, RepoName = request.RepoName });
 
-        return ValueTask.CompletedTask;
+        return Unit.ValueTask;
     }
 }

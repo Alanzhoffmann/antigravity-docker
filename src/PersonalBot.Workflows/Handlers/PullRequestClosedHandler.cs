@@ -6,7 +6,7 @@ using PersonalBot.Utils;
 
 namespace PersonalBot.Workflows.Handlers;
 
-public partial class PullRequestClosedHandler : INotificationHandler<PullRequestClosed>
+public partial class PullRequestClosedHandler : IRequestHandler<PullRequestClosed>
 {
     private readonly ILogger<PullRequestClosedHandler> _logger;
 
@@ -15,16 +15,16 @@ public partial class PullRequestClosedHandler : INotificationHandler<PullRequest
         _logger = logger;
     }
 
-    public ValueTask Handle(PullRequestClosed notification, CancellationToken cancellationToken)
+    public ValueTask<Unit> Handle(PullRequestClosed request, CancellationToken cancellationToken)
     {
-        if (notification.PrMerged)
+        if (request.PrMerged)
         {
-            _logger.LogInformation("PR merged head_ref='{headRef}'", notification.HeadRef);
-            var issueMatch = IssueRegex.Match(notification.HeadRef ?? string.Empty);
+            _logger.LogInformation("PR merged head_ref='{headRef}'", request.HeadRef);
+            var issueMatch = IssueRegex.Match(request.HeadRef ?? string.Empty);
             if (issueMatch.Success)
             {
                 string issueNum = issueMatch.Groups[1].Value;
-                string path = GitHubUtils.GetIssueRepoPath(notification.RepoName, issueNum);
+                string path = GitHubUtils.GetIssueRepoPath(request.RepoName, issueNum);
                 if (Directory.Exists(path))
                 {
                     _logger.LogInformation("Deleting isolated clone for issue #{issueNum}: '{path}'", issueNum, path);
@@ -41,7 +41,7 @@ public partial class PullRequestClosedHandler : INotificationHandler<PullRequest
             }
         }
 
-        return ValueTask.CompletedTask;
+        return Unit.ValueTask;
     }
 
     [GeneratedRegex(@"fix/issue-(\d+)")]

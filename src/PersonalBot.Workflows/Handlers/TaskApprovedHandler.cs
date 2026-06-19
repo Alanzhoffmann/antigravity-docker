@@ -5,7 +5,7 @@ using PersonalBot.Data.Models.Workflows;
 
 namespace PersonalBot.Workflows.Handlers;
 
-public class TaskApprovedHandler : INotificationHandler<TaskApproved>
+public class TaskApprovedHandler : IRequestHandler<TaskApproved>
 {
     private readonly ILogger<TaskApprovedHandler> _logger;
 
@@ -14,24 +14,24 @@ public class TaskApprovedHandler : INotificationHandler<TaskApproved>
         _logger = logger;
     }
 
-    public ValueTask Handle(TaskApproved notification, CancellationToken cancellationToken)
+    public ValueTask<Unit> Handle(TaskApproved request, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("Plan approved for issue #{issueNum} — starting implementation", notification.IssueNumber);
+        _logger.LogInformation("Plan approved for issue #{issueNum} — starting implementation", request.IssueNumber);
 
         string prompt =
-            $"The plan for Issue #{notification.IssueNumber} has been approved. Create branch 'fix/issue-{notification.IssueNumber}', implement the code changes, run any available local tests, and raise a PR via `gh pr create`. Commit only changes related to this issue.";
+            $"The plan for Issue #{request.IssueNumber} has been approved. Create branch 'fix/issue-{request.IssueNumber}', implement the code changes, run any available local tests, and raise a PR via `gh pr create`. Commit only changes related to this issue.";
 
-        notification.ChildWorkflows.Add(
+        request.ChildWorkflows.Add(
             new ChatStarted
             {
-                RepoName = notification.RepoName,
-                IssueNumber = notification.IssueNumber,
+                RepoName = request.RepoName,
+                IssueNumber = request.IssueNumber,
                 Prompt = prompt,
                 AgentPhase = AgentPhase.Execution,
                 ChildWorkflows = [new ChatIssueReply()],
             }
         );
 
-        return ValueTask.CompletedTask;
+        return Unit.ValueTask;
     }
 }

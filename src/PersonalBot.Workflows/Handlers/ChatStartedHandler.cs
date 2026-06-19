@@ -6,7 +6,7 @@ using PersonalBot.Data.Models.Workflows;
 
 namespace PersonalBot.Workflows.Handlers;
 
-public class ChatStartedHandler : INotificationHandler<ChatStarted>
+public class ChatStartedHandler : IRequestHandler<ChatStarted>
 {
     private readonly IChatResolver _chatResolver;
     private readonly ILogger<ChatStartedHandler> _logger;
@@ -17,24 +17,26 @@ public class ChatStartedHandler : INotificationHandler<ChatStarted>
         _logger = logger;
     }
 
-    public async ValueTask Handle(ChatStarted notification, CancellationToken cancellationToken)
+    public async ValueTask<Unit> Handle(ChatStarted request, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("Starting agent for issue #{issueNum}", notification.IssueNumber);
+        _logger.LogInformation("Starting agent for issue #{issueNum}", request.IssueNumber);
 
         var agentChat = _chatResolver.ResolveCurrent();
         var response = await agentChat.GetResponseAsync(
-            ((IIsIssueWebhook)notification).RepoPath,
-            notification.Prompt,
-            notification.AgentPhase,
-            notification.Session,
+            ((IIsIssueWebhook)request).RepoPath,
+            request.Prompt,
+            request.AgentPhase,
+            request.Session,
             cancellationToken
         );
 
-        notification.ChatOutput = response.Output;
-        notification.ArtifactOutput = response.ArtifactOutput;
-        notification.Session = response.Session;
-        notification.AgentName = agentChat.AgentName;
+        request.ChatOutput = response.Output;
+        request.ArtifactOutput = response.ArtifactOutput;
+        request.Session = response.Session;
+        request.AgentName = agentChat.AgentName;
 
-        _logger.LogInformation("{issueKey} processing complete", $"{notification.RepoName}#{notification.IssueNumber}");
+        _logger.LogInformation("{issueKey} processing complete", $"{request.RepoName}#{request.IssueNumber}");
+
+        return Unit.Value;
     }
 }

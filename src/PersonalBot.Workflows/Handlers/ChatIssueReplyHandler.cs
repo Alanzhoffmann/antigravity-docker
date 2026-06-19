@@ -6,7 +6,7 @@ using PersonalBot.Utils;
 
 namespace PersonalBot.Workflows.Handlers;
 
-public class ChatIssueReplyHandler : INotificationHandler<ChatIssueReply>
+public class ChatIssueReplyHandler : IRequestHandler<ChatIssueReply>
 {
     private readonly GitHubUtils _gitHubUtils;
     private readonly ILogger<ChatIssueReplyHandler> _logger;
@@ -17,9 +17,9 @@ public class ChatIssueReplyHandler : INotificationHandler<ChatIssueReply>
         _logger = logger;
     }
 
-    public async ValueTask Handle(ChatIssueReply notification, CancellationToken cancellationToken)
+    public async ValueTask<Unit> Handle(ChatIssueReply request, CancellationToken cancellationToken)
     {
-        var parentNotification = notification.ParentWorkflow;
+        var parentNotification = request.ParentWorkflow;
         switch (parentNotification)
         {
             case ChatStarted chatStarted:
@@ -35,5 +35,7 @@ public class ChatIssueReplyHandler : INotificationHandler<ChatIssueReply>
                 _logger.LogWarning("ChatIssueReply with no parent task, this should not happen");
                 break;
         }
+
+        return Unit.Value;
     }
 }

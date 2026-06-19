@@ -4,7 +4,7 @@ using PersonalBot.Data.Models.Workflows;
 
 namespace PersonalBot.Workflows.Handlers;
 
-public class WebhookReceivedHandler : INotificationHandler<WebhookReceived>
+public class WebhookReceivedHandler : IRequestHandler<WebhookReceived>
 {
     private readonly ILogger<WebhookReceivedHandler> _logger;
 
@@ -13,59 +13,59 @@ public class WebhookReceivedHandler : INotificationHandler<WebhookReceived>
         _logger = logger;
     }
 
-    public ValueTask Handle(WebhookReceived notification, CancellationToken cancellationToken)
+    public ValueTask<Unit> Handle(WebhookReceived request, CancellationToken cancellationToken)
     {
-        switch (notification)
+        switch (request)
         {
             case { EventType: "issues", Action: "opened", IssueNumber: not null and { Length: > 0 } }:
-                notification.ChildWorkflows.Add(
+                request.ChildWorkflows.Add(
                     new IssueOpened
                     {
-                        IssueNumber = notification.IssueNumber,
-                        IssueTitle = notification.IssueTitle,
-                        IssueBody = notification.IssueBody,
-                        RepoName = notification.RepoName,
-                        CloneUrl = notification.CloneUrl,
+                        IssueNumber = request.IssueNumber,
+                        IssueTitle = request.IssueTitle,
+                        IssueBody = request.IssueBody,
+                        RepoName = request.RepoName,
+                        CloneUrl = request.CloneUrl,
                     }
                 );
                 break;
             case { EventType: "reaction", Action: "created", IssueNumber: not null and { Length: > 0 } }:
-                notification.ChildWorkflows.Add(
+                request.ChildWorkflows.Add(
                     new ReactionCreated
                     {
-                        ReactionContent = notification.ReactionContent,
-                        IssueNumber = notification.IssueNumber,
-                        RepoName = notification.RepoName,
-                        CloneUrl = notification.CloneUrl,
+                        ReactionContent = request.ReactionContent,
+                        IssueNumber = request.IssueNumber,
+                        RepoName = request.RepoName,
+                        CloneUrl = request.CloneUrl,
                     }
                 );
                 break;
             case { EventType: "issue_comment", Action: "created", IssueNumber: not null and { Length: > 0 } }:
-                notification.ChildWorkflows.Add(
+                request.ChildWorkflows.Add(
                     new IssueCommentCreated
                     {
-                        IssueNumber = notification.IssueNumber,
-                        CommentBody = notification.CommentBody,
-                        RepoName = notification.RepoName,
-                        CloneUrl = notification.CloneUrl,
+                        IssueNumber = request.IssueNumber,
+                        CommentBody = request.CommentBody,
+                        RepoName = request.RepoName,
+                        CloneUrl = request.CloneUrl,
                     }
                 );
                 break;
             case { EventType: "pull_request", Action: "closed" }:
-                notification.ChildWorkflows.Add(
+                request.ChildWorkflows.Add(
                     new PullRequestClosed
                     {
-                        PrMerged = notification.PrMerged,
-                        HeadRef = notification.HeadRef,
-                        RepoName = notification.RepoName,
+                        PrMerged = request.PrMerged,
+                        HeadRef = request.HeadRef,
+                        RepoName = request.RepoName,
                     }
                 );
                 break;
             default:
-                _logger.LogInformation("Unhandled webhook {Webhook} — no-op", notification);
+                _logger.LogInformation("Unhandled webhook {Webhook} — no-op", request);
                 break;
         }
 
-        return ValueTask.CompletedTask;
+        return Unit.ValueTask;
     }
 }
