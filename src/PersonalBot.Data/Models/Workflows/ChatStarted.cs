@@ -3,7 +3,7 @@ using PersonalBot.Data.Models.Enums;
 
 namespace PersonalBot.Data.Models.Workflows;
 
-public class ChatStarted : Workflow, IIssueWebhook
+public class ChatStarted : Workflow, IIsIssueWebhook, IHasIssueSession
 {
     public required string RepoName { get; set; }
     public required string IssueNumber { get; set; }

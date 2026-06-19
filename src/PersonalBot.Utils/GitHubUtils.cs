@@ -1,4 +1,3 @@
-using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 
 namespace PersonalBot.Utils;
@@ -45,16 +44,6 @@ public partial class GitHubUtils
         _logger.LogInformation("Posting comment on issue #{issueNum} (session='{sessionId}', length={PayloadLength})", issueNum, sessionId, payload.Length);
 
         await _processUtils.RunProcessAsync("gh", ["issue", "comment", issueNum, "--body", payload], repoPath, cancellationToken);
-    }
-
-    public async Task<string?> GetSessionIdFromIssueAsync(string repoPath, string issueNum, CancellationToken cancellationToken = default)
-    {
-        _logger.LogInformation("Fetching session ID from issue #{issueNum}", issueNum);
-        string commentsJson = await _processUtils.RunProcessAsync("gh", ["issue", "view", issueNum, "--json", "comments"], repoPath, cancellationToken);
-        var match = SessionIdRegex.Match(commentsJson);
-        var sessionId = match.Success ? match.Groups[1].Value : null;
-        _logger.LogInformation("Session ID for issue #{issueNum}: '{sessionId}'", issueNum, string.IsNullOrEmpty(sessionId) ? "none" : sessionId);
-        return sessionId;
     }
 
     public async Task<int> GetCommitsAheadOfMainAsync(string repoPath, string baseBranch = "main", CancellationToken cancellationToken = default)
@@ -120,7 +109,4 @@ public partial class GitHubUtils
     public static string GetIssueRepoPath(string repoName, string issueNum) => $"{WorkspaceBase}/{repoName}-issue-{issueNum}";
 
     public static bool IsOwnComment(string commentBody) => commentBody.Contains(BotWatermark);
-
-    [GeneratedRegex(@"<!-- agy-session-id: ([a-zA-Z0-9\-]+) -->", RegexOptions.RightToLeft)]
-    private static partial Regex SessionIdRegex { get; }
 }

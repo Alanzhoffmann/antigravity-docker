@@ -6,7 +6,7 @@ using PersonalBot.Utils;
 namespace PersonalBot.Workflows.Behaviors;
 
 public class RepoPipelineBehavior<TMessage, TResponse> : IPipelineBehavior<TMessage, TResponse>
-    where TMessage : IIssueWebhook, IMessage
+    where TMessage : IIsIssueWebhook, IMessage
 {
     private readonly GitHubUtils _gitHubUtils;
     private readonly ILogger<RepoPipelineBehavior<TMessage, TResponse>> _logger;

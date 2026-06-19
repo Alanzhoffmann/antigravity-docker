@@ -2,7 +2,7 @@ using PersonalBot.Utils;
 
 namespace PersonalBot.Data.Interfaces;
 
-public interface IIssueWebhook
+public interface IIsIssueWebhook
 {
     string RepoName { get; }
     string IssueNumber { get; }

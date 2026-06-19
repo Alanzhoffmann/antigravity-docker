@@ -2,7 +2,7 @@ using PersonalBot.Data.Interfaces;
 
 namespace PersonalBot.Data.Models.Workflows;
 
-public class ReactionCreated : Workflow, IIssueWebhook
+public class ReactionCreated : Workflow, IIsIssueWebhook
 {
     public string? ReactionContent { get; set; }
     public required string IssueNumber { get; set; }

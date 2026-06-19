@@ -23,7 +23,7 @@ public class ChatStartedHandler : INotificationHandler<ChatStarted>
 
         var agentChat = _chatResolver.ResolveCurrent();
         var response = await agentChat.GetResponseAsync(
-            ((IIssueWebhook)notification).RepoPath,
+            ((IIsIssueWebhook)notification).RepoPath,
             notification.Prompt,
             notification.AgentPhase,
             notification.Session,

@@ -10,10 +10,7 @@ public static class ServiceCollectionExtensions
 {
     public static IServiceCollection AddWorkflows(this IServiceCollection services)
     {
-        services.AddMediator(options =>
-        {
-            options.PipelineBehaviors = [typeof(RepoPipelineBehavior<,>)];
-        });
+        services.AddMediator(options => options.PipelineBehaviors = [typeof(RepoPipelineBehavior<,>), typeof(RestoreAgentSessionPipelineBehavior<,>)]);
         services.AddHostedService<WorkflowRunnerBackgroundService>();
         services.AddDatabase();
         services.AddChats();

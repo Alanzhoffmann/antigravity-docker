@@ -2,7 +2,7 @@
 
 namespace PersonalBot.Data.Models.Workflows;
 
-public class IssueOpened : Workflow, IIssueWebhook
+public class IssueOpened : Workflow, IIsIssueWebhook
 {
     public required string IssueNumber { get; set; }
     public string? IssueTitle { get; set; }

@@ -27,7 +27,7 @@ public class ChatIssueReplyHandler : INotificationHandler<ChatIssueReply>
                     ? chatStarted.ArtifactOutput
                     : chatStarted.ChatOutput ?? $"empty output for {chatStarted.AgentName}";
 
-                var issueWebhook = (IIssueWebhook)chatStarted;
+                var issueWebhook = (IIsIssueWebhook)chatStarted;
 
                 await _gitHubUtils.PostGitHubCommentAsync(issueWebhook.RepoPath, issueWebhook.IssueNumber, comment, chatStarted.Session, cancellationToken);
                 break;
