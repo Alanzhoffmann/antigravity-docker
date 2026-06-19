@@ -1,7 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using PersonalBot.Data.BackgroundServices;
-using PersonalBot.Data.Interfaces;
 using PersonalBot.Data.Internal;
 
 namespace PersonalBot.Data;
@@ -12,7 +11,6 @@ public static class ServiceCollectionExtensions
     {
         services.AddDbContext<BotDbContext>(options => options.UseSqlite("Data Source=/config/app.db;Cache=Shared"));
         services.AddDataBackgroundServices<BotDbContext>();
-        services.AddScoped<ITaskService, TaskService>();
 
         return services;
     }
