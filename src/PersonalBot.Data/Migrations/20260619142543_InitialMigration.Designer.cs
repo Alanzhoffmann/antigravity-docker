@@ -11,55 +11,14 @@ using PersonalBot.Data;
 namespace PersonalBot.Data.Migrations;
 
 [DbContext(typeof(BotDbContext))]
-[Migration("20260617203427_ChatStartedWorkflow")]
-partial class _20260617203427_ChatStartedWorkflow
+[Migration("20260619142543_InitialMigration")]
+partial class _20260619142543_InitialMigration
 {
     /// <inheritdoc />
     protected override void BuildTargetModel(ModelBuilder modelBuilder)
     {
 #pragma warning disable 612, 618
         modelBuilder.HasAnnotation("ProductVersion", "11.0.0-preview.5.26302.115");
-
-        modelBuilder.Entity("PersonalBot.Data.Models.AiTask", b =>
-            {
-                b.Property<Guid>("Id")
-                    .ValueGeneratedOnAdd()
-                    .HasColumnType("TEXT");
-
-                b.Property<string>("Agent")
-                    .HasColumnType("TEXT");
-
-                b.Property<DateTimeOffset>("CreatedAt")
-                    .HasColumnType("TEXT");
-
-                b.Property<string>("IssueNum")
-                    .IsRequired()
-                    .HasColumnType("TEXT");
-
-                b.Property<int>("Phase")
-                    .HasColumnType("INTEGER");
-
-                b.Property<string>("Prompt")
-                    .IsRequired()
-                    .HasColumnType("TEXT");
-
-                b.Property<string>("RepoPath")
-                    .IsRequired()
-                    .HasColumnType("TEXT");
-
-                b.Property<int>("RetryCount")
-                    .HasColumnType("INTEGER");
-
-                b.Property<string>("Session")
-                    .HasColumnType("TEXT");
-
-                b.Property<int>("Status")
-                    .HasColumnType("INTEGER");
-
-                b.HasKey("Id");
-
-                b.ToTable("AiTasks");
-            });
 
         modelBuilder.Entity("PersonalBot.Data.Models.Workflows.Workflow", b =>
             {
@@ -98,6 +57,13 @@ partial class _20260617203427_ChatStartedWorkflow
                 b.UseTphMappingStrategy();
             });
 
+        modelBuilder.Entity("PersonalBot.Data.Models.Workflows.ChatIssueReply", b =>
+            {
+                b.HasBaseType("PersonalBot.Data.Models.Workflows.Workflow");
+
+                b.HasDiscriminator().HasValue("ChatIssueReply");
+            });
+
         modelBuilder.Entity("PersonalBot.Data.Models.Workflows.ChatStarted", b =>
             {
                 b.HasBaseType("PersonalBot.Data.Models.Workflows.Workflow");
@@ -129,11 +95,11 @@ partial class _20260617203427_ChatStartedWorkflow
                     .HasColumnType("TEXT")
                     .HasColumnName("Prompt");
 
-                b.Property<string>("RepoPath")
+                b.Property<string>("RepoName")
                     .IsRequired()
                     .ValueGeneratedOnUpdateSometimes()
                     .HasColumnType("TEXT")
-                    .HasColumnName("RepoPath");
+                    .HasColumnName("RepoName");
 
                 b.Property<string>("Session")
                     .HasColumnType("TEXT")
@@ -157,6 +123,7 @@ partial class _20260617203427_ChatStartedWorkflow
                     .HasColumnName("CommentBody");
 
                 b.Property<string>("IssueNumber")
+                    .IsRequired()
                     .ValueGeneratedOnUpdateSometimes()
                     .HasColumnType("TEXT")
                     .HasColumnName("IssueNumber");
@@ -185,6 +152,7 @@ partial class _20260617203427_ChatStartedWorkflow
                     .HasColumnName("IssueBody");
 
                 b.Property<string>("IssueNumber")
+                    .IsRequired()
                     .ValueGeneratedOnUpdateSometimes()
                     .HasColumnType("TEXT")
                     .HasColumnName("IssueNumber");
@@ -236,6 +204,7 @@ partial class _20260617203427_ChatStartedWorkflow
                     .HasColumnName("CloneUrl");
 
                 b.Property<string>("IssueNumber")
+                    .IsRequired()
                     .ValueGeneratedOnUpdateSometimes()
                     .HasColumnType("TEXT")
                     .HasColumnName("IssueNumber");
@@ -264,15 +233,11 @@ partial class _20260617203427_ChatStartedWorkflow
                     .HasColumnType("TEXT")
                     .HasColumnName("IssueNumber");
 
-                b.Property<string>("RepoPath")
+                b.Property<string>("RepoName")
                     .IsRequired()
                     .ValueGeneratedOnUpdateSometimes()
                     .HasColumnType("TEXT")
-                    .HasColumnName("RepoPath");
-
-                b.Property<string>("SessionId")
-                    .HasColumnType("TEXT")
-                    .HasColumnName("SessionId");
+                    .HasColumnName("RepoName");
 
                 b.HasDiscriminator().HasValue("TaskApproved");
             });
