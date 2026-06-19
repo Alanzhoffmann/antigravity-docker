@@ -13,7 +13,7 @@ public class WebhookReceivedHandler : INotificationHandler<WebhookReceived>
         _logger = logger;
     }
 
-    public async ValueTask Handle(WebhookReceived notification, CancellationToken cancellationToken)
+    public ValueTask Handle(WebhookReceived notification, CancellationToken cancellationToken)
     {
         switch (notification)
         {
@@ -65,5 +65,7 @@ public class WebhookReceivedHandler : INotificationHandler<WebhookReceived>
                 _logger.LogInformation("Unhandled webhook {Webhook} — no-op", notification);
                 break;
         }
+
+        return ValueTask.CompletedTask;
     }
 }

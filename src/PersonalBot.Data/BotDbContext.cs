@@ -1,37 +1,28 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging;
 using PersonalBot.Data.Internal;
+using PersonalBot.Data.Models.Enums;
 using PersonalBot.Data.Models.Workflows;
 
 namespace PersonalBot.Data;
 
 public class BotDbContext : DbContext
 {
-    private readonly ILogger<BotDbContext> _logger;
-
-    public BotDbContext(DbContextOptions<BotDbContext> dbOptions, MigrationState<BotDbContext> migrationState, ILogger<BotDbContext> logger)
+    public BotDbContext(DbContextOptions<BotDbContext> dbOptions, MigrationState<BotDbContext> migrationState)
         : base(dbOptions)
     {
         MigrationState = migrationState;
-        _logger = logger;
     }
 
     public DbSet<Workflow> Workflows => Set<Workflow>();
 
     public MigrationState<BotDbContext> MigrationState { get; }
 
-    public async Task<string?> GetSessionFromIssueAsync(string issueNumber, CancellationToken cancellationToken = default)
-    {
-        var session = await Set<ChatStarted>()
+    public async Task<string?> GetSessionFromIssueAsync(string issueNumber, Guid currentWorkflowId, CancellationToken cancellationToken = default) =>
+        await Set<ChatStarted>()
             .OrderByDescending(w => w.CreatedAt)
-            .Where(w => w.IssueNumber == issueNumber)
+            .Where(w => w.IssueNumber == issueNumber && w.Status == WorkflowStatus.Completed && w.Id != currentWorkflowId)
             .Select(w => w.Session)
             .FirstOrDefaultAsync(cancellationToken: cancellationToken);
-
-        _logger.LogInformation("returning session for issue {IssueNumber}: {Session}", issueNumber, session);
-
-        return session;
-    }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
