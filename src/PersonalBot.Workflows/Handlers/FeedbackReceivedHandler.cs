@@ -37,7 +37,6 @@ public class FeedbackReceivedHandler : INotificationHandler<FeedbackReceived>
             new ChatStarted
             {
                 RepoName = notification.RepoName,
-                RepoPath = notification.RepoPath,
                 IssueNumber = notification.IssueNumber,
                 Prompt = execPrompt,
                 AgentPhase = AgentPhase.Planning,

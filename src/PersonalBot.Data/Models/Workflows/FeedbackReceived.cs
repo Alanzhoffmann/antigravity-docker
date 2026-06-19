@@ -7,5 +7,4 @@ public class FeedbackReceived : Workflow, IIssueWebhook
     public required string IssueNumber { get; set; }
     public required string CommentBody { get; set; }
     public required string RepoName { get; set; }
-    public required string RepoPath { get; set; }
 }

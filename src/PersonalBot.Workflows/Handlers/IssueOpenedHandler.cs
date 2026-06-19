@@ -2,32 +2,25 @@ using Mediator;
 using Microsoft.Extensions.Logging;
 using PersonalBot.Data.Models.Enums;
 using PersonalBot.Data.Models.Workflows;
-using PersonalBot.Utils;
 
 namespace PersonalBot.Workflows.Handlers;
 
 public class IssueOpenedHandler : INotificationHandler<IssueOpened>
 {
-    private readonly GitHubUtils _gitHubUtils;
     private readonly ILogger<IssueOpenedHandler> _logger;
 
-    public IssueOpenedHandler(GitHubUtils gitHubUtils, ILogger<IssueOpenedHandler> logger)
+    public IssueOpenedHandler(ILogger<IssueOpenedHandler> logger)
     {
-        _gitHubUtils = gitHubUtils;
         _logger = logger;
     }
 
-    public async ValueTask Handle(IssueOpened notification, CancellationToken cancellationToken)
+    public ValueTask Handle(IssueOpened notification, CancellationToken cancellationToken)
     {
         if (string.IsNullOrEmpty(notification.IssueNumber))
         {
             _logger.LogWarning($"issues/opened missing issue.number");
-            return;
+            return ValueTask.CompletedTask;
         }
-
-        // Each issue gets its own isolated clone so branches and commits never bleed across issues
-        string localRepoPath = GitHubUtils.GetIssueRepoPath(notification.RepoName, notification.IssueNumber);
-        await _gitHubUtils.EnsureRepoAsync(localRepoPath, notification.CloneUrl, notification.RepoName, notification.IssueNumber, cancellationToken);
 
         var title = notification.IssueTitle ?? string.Empty;
         var body = notification.IssueBody ?? string.Empty;
@@ -47,12 +40,13 @@ INSTRUCTIONS:
             new ChatStarted
             {
                 RepoName = notification.RepoName,
-                RepoPath = localRepoPath,
                 IssueNumber = notification.IssueNumber,
                 Prompt = prompt,
                 AgentPhase = AgentPhase.Planning,
                 ChildWorkflows = [new ChatIssueReply()],
             }
         );
+
+        return ValueTask.CompletedTask;
     }
 }

@@ -1,9 +1,6 @@
 using Mediator;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using PersonalBot.Data;
-using PersonalBot.Data.Models.Enums;
 using PersonalBot.Data.Models.Workflows;
 using PersonalBot.Utils;
 
@@ -22,22 +19,19 @@ public class IssueCommentCreatedHandler : INotificationHandler<IssueCommentCreat
         _logger = logger;
     }
 
-    public async ValueTask Handle(IssueCommentCreated notification, CancellationToken cancellationToken)
+    public ValueTask Handle(IssueCommentCreated notification, CancellationToken cancellationToken)
     {
         if (string.IsNullOrEmpty(notification.IssueNumber) || string.IsNullOrEmpty(notification.CommentBody))
         {
             _logger.LogWarning($"issue_comment missing issue.number or comment.body");
-            return;
+            return ValueTask.CompletedTask;
         }
 
         if (GitHubUtils.IsOwnComment(notification.CommentBody))
         {
             _logger.LogInformation($"Skipping Bot comment to prevent loop");
-            return;
+            return ValueTask.CompletedTask;
         }
-
-        string localRepoPath = GitHubUtils.GetIssueRepoPath(notification.RepoName, notification.IssueNumber);
-        await _gitHubUtils.EnsureRepoAsync(localRepoPath, notification.CloneUrl, notification.RepoName, notification.IssueNumber, cancellationToken);
 
         bool isApproval =
             notification.CommentBody.Trim() == "👍"
@@ -46,19 +40,15 @@ public class IssueCommentCreatedHandler : INotificationHandler<IssueCommentCreat
 
         notification.ChildWorkflows.Add(
             isApproval
-                ? new TaskApproved
-                {
-                    RepoPath = localRepoPath,
-                    IssueNumber = notification.IssueNumber,
-                    RepoName = notification.RepoName,
-                }
+                ? new TaskApproved { IssueNumber = notification.IssueNumber, RepoName = notification.RepoName }
                 : new FeedbackReceived
                 {
-                    RepoPath = localRepoPath,
                     IssueNumber = notification.IssueNumber,
                     RepoName = notification.RepoName,
                     CommentBody = notification.CommentBody,
                 }
         );
+
+        return ValueTask.CompletedTask;
     }
 }

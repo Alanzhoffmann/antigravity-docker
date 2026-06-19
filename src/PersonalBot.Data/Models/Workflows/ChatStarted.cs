@@ -6,7 +6,6 @@ namespace PersonalBot.Data.Models.Workflows;
 public class ChatStarted : Workflow, IIssueWebhook
 {
     public required string RepoName { get; set; }
-    public required string RepoPath { get; set; }
     public required string IssueNumber { get; set; }
     public required string Prompt { get; set; }
     public required AgentPhase AgentPhase { get; init; }

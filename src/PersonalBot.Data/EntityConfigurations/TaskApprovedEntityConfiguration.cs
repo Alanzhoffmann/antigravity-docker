@@ -12,6 +12,5 @@ public class TaskApprovedEntityConfiguration : IEntityTypeConfiguration<TaskAppr
 
         builder.Property(t => t.RepoName).HasColumnName(nameof(TaskApproved.RepoName));
         builder.Property(t => t.IssueNumber).HasColumnName(nameof(TaskApproved.IssueNumber));
-        builder.Property(t => t.RepoPath).HasColumnName(nameof(TaskApproved.RepoPath));
     }
 }

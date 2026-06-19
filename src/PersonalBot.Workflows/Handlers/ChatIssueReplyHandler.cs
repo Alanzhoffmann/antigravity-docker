@@ -1,5 +1,6 @@
 using Mediator;
 using Microsoft.Extensions.Logging;
+using PersonalBot.Data.Interfaces;
 using PersonalBot.Data.Models.Workflows;
 using PersonalBot.Utils;
 
@@ -26,7 +27,9 @@ public class ChatIssueReplyHandler : INotificationHandler<ChatIssueReply>
                     ? chatStarted.ArtifactOutput
                     : chatStarted.ChatOutput ?? $"empty output for {chatStarted.AgentName}";
 
-                await _gitHubUtils.PostGitHubCommentAsync(chatStarted.RepoPath, chatStarted.IssueNumber, comment, chatStarted.Session, cancellationToken);
+                var issueWebhook = (IIssueWebhook)chatStarted;
+
+                await _gitHubUtils.PostGitHubCommentAsync(issueWebhook.RepoPath, issueWebhook.IssueNumber, comment, chatStarted.Session, cancellationToken);
                 break;
             default:
                 _logger.LogWarning("ChatIssueReply with no parent task, this should not happen");

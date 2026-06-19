@@ -1,6 +1,7 @@
 using Mediator;
 using Microsoft.Extensions.Logging;
 using PersonalBot.Chats.Interfaces;
+using PersonalBot.Data.Interfaces;
 using PersonalBot.Data.Models.Workflows;
 
 namespace PersonalBot.Workflows.Handlers;
@@ -22,7 +23,7 @@ public class ChatStartedHandler : INotificationHandler<ChatStarted>
 
         var agentChat = _chatResolver.ResolveCurrent();
         var response = await agentChat.GetResponseAsync(
-            notification.RepoPath,
+            ((IIssueWebhook)notification).RepoPath,
             notification.Prompt,
             notification.AgentPhase,
             notification.Session,

@@ -11,7 +11,6 @@ public class ChatStartedEntityConfiguration : IEntityTypeConfiguration<ChatStart
         builder.HasBaseType<Workflow>();
 
         builder.Property(c => c.RepoName).HasColumnName(nameof(ChatStarted.RepoName));
-        builder.Property(c => c.RepoPath).HasColumnName(nameof(ChatStarted.RepoPath));
         builder.Property(c => c.IssueNumber).HasColumnName(nameof(ChatStarted.IssueNumber));
         builder.Property(c => c.Prompt).HasColumnName(nameof(ChatStarted.Prompt));
         builder.Property(c => c.AgentPhase).HasColumnName(nameof(ChatStarted.AgentPhase));

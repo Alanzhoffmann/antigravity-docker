@@ -1,5 +1,4 @@
 using PersonalBot.Chats.Models;
-using PersonalBot.Data.Models;
 using PersonalBot.Data.Models.Enums;
 
 namespace PersonalBot.Chats.Interfaces;

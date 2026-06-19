@@ -33,7 +33,6 @@ public class TaskApprovedHandler : INotificationHandler<TaskApproved>
             new ChatStarted
             {
                 RepoName = notification.RepoName,
-                RepoPath = notification.RepoPath,
                 IssueNumber = notification.IssueNumber,
                 Prompt = prompt,
                 AgentPhase = AgentPhase.Execution,

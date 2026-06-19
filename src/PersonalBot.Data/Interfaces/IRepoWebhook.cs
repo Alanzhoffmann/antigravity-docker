@@ -7,4 +7,5 @@ public interface IIssueWebhook
     string RepoName { get; }
     string IssueNumber { get; }
     string RepoPath => GitHubUtils.GetIssueRepoPath(RepoName, IssueNumber);
+    string? CloneUrl => null;
 }
