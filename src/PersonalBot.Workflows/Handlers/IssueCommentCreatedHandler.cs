@@ -39,54 +39,26 @@ public class IssueCommentCreatedHandler : INotificationHandler<IssueCommentCreat
         string localRepoPath = GitHubUtils.GetIssueRepoPath(notification.RepoName, notification.IssueNumber);
         await _gitHubUtils.EnsureRepoAsync(localRepoPath, notification.CloneUrl, notification.RepoName, notification.IssueNumber, cancellationToken);
 
-        using var scope = _scopeFactory.CreateScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<BotDbContext>();
-        var existingSession = await dbContext
-            .Set<ChatStarted>()
-            .OrderByDescending(w => w.CreatedAt)
-            .Where(w => w.IssueNumber == notification.IssueNumber)
-            .Select(w => w.Session)
-            .FirstOrDefaultAsync(cancellationToken: cancellationToken);
-
         bool isApproval =
             notification.CommentBody.Trim() == "👍"
             || notification.CommentBody.Trim().Equals("lgtm", StringComparison.OrdinalIgnoreCase)
             || notification.CommentBody.Trim().Equals("approved", StringComparison.OrdinalIgnoreCase);
 
-        if (isApproval)
-        {
-            notification.ChildWorkflows.Add(
-                new TaskApproved
+        notification.ChildWorkflows.Add(
+            isApproval
+                ? new TaskApproved
                 {
                     RepoPath = localRepoPath,
                     IssueNumber = notification.IssueNumber,
-                    Session = existingSession,
-                }
-            );
-        }
-        else
-        {
-            string execPrompt =
-                $"Feedback received on Issue #{notification.IssueNumber}: '{notification.CommentBody}'. Update the plan accordingly. Post an updated plan artifact and ask for another 👍 to proceed.";
-
-            _logger.LogInformation(
-                "Feedback on #{issueNum}: '{CommentBody}'",
-                notification.IssueNumber,
-                notification.CommentBody[..Math.Min(80, notification.CommentBody.Length)]
-            );
-
-            notification.ChildWorkflows.Add(
-                new ChatStarted
-                {
                     RepoName = notification.RepoName,
+                }
+                : new FeedbackReceived
+                {
                     RepoPath = localRepoPath,
                     IssueNumber = notification.IssueNumber,
-                    Prompt = execPrompt,
-                    AgentPhase = AgentPhase.Planning,
-                    Session = existingSession,
-                    ChildWorkflows = [new ChatIssueReply()],
+                    RepoName = notification.RepoName,
+                    CommentBody = notification.CommentBody,
                 }
-            );
-        }
+        );
     }
 }

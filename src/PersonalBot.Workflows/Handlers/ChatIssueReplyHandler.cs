@@ -19,15 +19,18 @@ public class ChatIssueReplyHandler : INotificationHandler<ChatIssueReply>
     public async ValueTask Handle(ChatIssueReply notification, CancellationToken cancellationToken)
     {
         var parentNotification = notification.ParentWorkflow;
-        if (parentNotification is ChatStarted chatStarted)
+        switch (parentNotification)
         {
-            var comment = !string.IsNullOrEmpty(chatStarted.ArtifactOutput)
-                ? chatStarted.ArtifactOutput
-                : chatStarted.ChatOutput ?? $"empty output for {chatStarted.AgentName}";
-            await _gitHubUtils.PostGitHubCommentAsync(chatStarted.RepoPath, chatStarted.IssueNumber, comment, chatStarted.Session, cancellationToken);
-            return;
-        }
+            case ChatStarted chatStarted:
+                var comment = !string.IsNullOrEmpty(chatStarted.ArtifactOutput)
+                    ? chatStarted.ArtifactOutput
+                    : chatStarted.ChatOutput ?? $"empty output for {chatStarted.AgentName}";
 
-        _logger.LogWarning("ChatIssueReply with no parent task, this should not happen");
+                await _gitHubUtils.PostGitHubCommentAsync(chatStarted.RepoPath, chatStarted.IssueNumber, comment, chatStarted.Session, cancellationToken);
+                break;
+            default:
+                _logger.LogWarning("ChatIssueReply with no parent task, this should not happen");
+                break;
+        }
     }
 }

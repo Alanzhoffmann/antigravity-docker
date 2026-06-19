@@ -19,6 +19,13 @@ public class BotDbContext : DbContext
 
     public MigrationState<BotDbContext> MigrationState { get; }
 
+    public async Task<string?> GetSessionFromIssueAsync(string issueNumber, CancellationToken cancellationToken = default) =>
+        await Set<ChatStarted>()
+            .OrderByDescending(w => w.CreatedAt)
+            .Where(w => w.IssueNumber == issueNumber)
+            .Select(w => w.Session)
+            .FirstOrDefaultAsync(cancellationToken: cancellationToken);
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(BotDbContext).Assembly);

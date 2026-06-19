@@ -10,7 +10,7 @@ public class TaskApprovedEntityConfiguration : IEntityTypeConfiguration<TaskAppr
     {
         builder.HasBaseType<Workflow>();
 
-        builder.Property(t => t.Session).HasColumnName(nameof(TaskApproved.Session));
+        builder.Property(t => t.RepoName).HasColumnName(nameof(TaskApproved.RepoName));
         builder.Property(t => t.IssueNumber).HasColumnName(nameof(TaskApproved.IssueNumber));
         builder.Property(t => t.RepoPath).HasColumnName(nameof(TaskApproved.RepoPath));
     }

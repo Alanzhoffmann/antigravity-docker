@@ -7,27 +7,31 @@ using PersonalBot.Data.Models.Workflows;
 
 namespace PersonalBot.Workflows.Handlers;
 
-public class TaskApprovedHandler : INotificationHandler<TaskApproved>
+public class FeedbackReceivedHandler : INotificationHandler<FeedbackReceived>
 {
     private readonly IServiceScopeFactory _scopeFactory;
-    private readonly ILogger<TaskApprovedHandler> _logger;
+    private readonly ILogger<FeedbackReceived> _logger;
 
-    public TaskApprovedHandler(IServiceScopeFactory scopeFactory, ILogger<TaskApprovedHandler> logger)
+    public FeedbackReceivedHandler(IServiceScopeFactory scopeFactory, ILogger<FeedbackReceived> logger)
     {
         _scopeFactory = scopeFactory;
         _logger = logger;
     }
 
-    public async ValueTask Handle(TaskApproved notification, CancellationToken cancellationToken)
+    public async ValueTask Handle(FeedbackReceived notification, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("Plan approved for issue #{issueNum} — starting implementation", notification.IssueNumber);
-
         using var scope = _scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<BotDbContext>();
         var existingSession = await dbContext.GetSessionFromIssueAsync(notification.IssueNumber, cancellationToken);
 
-        string prompt =
-            $"The plan for Issue #{notification.IssueNumber} has been approved. Create branch 'fix/issue-{notification.IssueNumber}', implement the code changes, run any available local tests, and raise a PR via `gh pr create`. Commit only changes related to this issue.";
+        string execPrompt =
+            $"Feedback received on Issue #{notification.IssueNumber}: '{notification.CommentBody}'. Update the plan accordingly. Post an updated plan artifact and ask for another 👍 to proceed.";
+
+        _logger.LogInformation(
+            "Feedback on #{issueNum}: '{CommentBody}'",
+            notification.IssueNumber,
+            notification.CommentBody[..Math.Min(80, notification.CommentBody.Length)]
+        );
 
         notification.ChildWorkflows.Add(
             new ChatStarted
@@ -35,8 +39,8 @@ public class TaskApprovedHandler : INotificationHandler<TaskApproved>
                 RepoName = notification.RepoName,
                 RepoPath = notification.RepoPath,
                 IssueNumber = notification.IssueNumber,
-                Prompt = prompt,
-                AgentPhase = AgentPhase.Execution,
+                Prompt = execPrompt,
+                AgentPhase = AgentPhase.Planning,
                 Session = existingSession,
                 ChildWorkflows = [new ChatIssueReply()],
             }

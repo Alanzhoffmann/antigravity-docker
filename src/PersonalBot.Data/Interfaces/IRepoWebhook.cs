@@ -1,0 +1,10 @@
+using PersonalBot.Utils;
+
+namespace PersonalBot.Data.Interfaces;
+
+public interface IIssueWebhook
+{
+    string RepoName { get; }
+    string IssueNumber { get; }
+    string RepoPath => GitHubUtils.GetIssueRepoPath(RepoName, IssueNumber);
+}

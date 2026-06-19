@@ -2,9 +2,10 @@ using PersonalBot.Data.Interfaces;
 
 namespace PersonalBot.Data.Models.Workflows;
 
-public class TaskApproved : Workflow, IIssueWebhook
+public class FeedbackReceived : Workflow, IIssueWebhook
 {
+    public required string IssueNumber { get; set; }
+    public required string CommentBody { get; set; }
     public required string RepoName { get; set; }
     public required string RepoPath { get; set; }
-    public required string IssueNumber { get; set; }
 }

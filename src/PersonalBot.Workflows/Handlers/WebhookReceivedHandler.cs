@@ -17,7 +17,7 @@ public class WebhookReceivedHandler : INotificationHandler<WebhookReceived>
     {
         switch (notification)
         {
-            case { EventType: "issues", Action: "opened" }:
+            case { EventType: "issues", Action: "opened", IssueNumber: not null and { Length: > 0 } }:
                 notification.ChildWorkflows.Add(
                     new IssueOpened
                     {
@@ -29,7 +29,7 @@ public class WebhookReceivedHandler : INotificationHandler<WebhookReceived>
                     }
                 );
                 break;
-            case { EventType: "reaction", Action: "created" }:
+            case { EventType: "reaction", Action: "created", IssueNumber: not null and { Length: > 0 } }:
                 notification.ChildWorkflows.Add(
                     new ReactionCreated
                     {
@@ -40,7 +40,7 @@ public class WebhookReceivedHandler : INotificationHandler<WebhookReceived>
                     }
                 );
                 break;
-            case { EventType: "issue_comment", Action: "created" }:
+            case { EventType: "issue_comment", Action: "created", IssueNumber: not null and { Length: > 0 } }:
                 notification.ChildWorkflows.Add(
                     new IssueCommentCreated
                     {

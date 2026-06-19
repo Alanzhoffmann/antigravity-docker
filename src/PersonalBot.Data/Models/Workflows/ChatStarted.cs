@@ -1,8 +1,9 @@
+using PersonalBot.Data.Interfaces;
 using PersonalBot.Data.Models.Enums;
 
 namespace PersonalBot.Data.Models.Workflows;
 
-public class ChatStarted : Workflow
+public class ChatStarted : Workflow, IIssueWebhook
 {
     public required string RepoName { get; set; }
     public required string RepoPath { get; set; }
