@@ -23,9 +23,10 @@ public class ChatIssueReplyHandler : IRequestHandler<ChatIssueReply>
         switch (parentNotification)
         {
             case ChatStarted chatStarted:
-                var comment = !string.IsNullOrEmpty(chatStarted.ArtifactOutput)
-                    ? chatStarted.ArtifactOutput
-                    : chatStarted.ChatOutput ?? $"empty output for {chatStarted.AgentName}";
+                var comment =
+                    !string.IsNullOrEmpty(chatStarted.ArtifactOutput) ? chatStarted.ArtifactOutput
+                    : !string.IsNullOrEmpty(chatStarted.ChatOutput) ? chatStarted.ChatOutput
+                    : $"empty output for {chatStarted.AgentName}";
 
                 var issueWebhook = (IIsIssueWebhook)chatStarted;
 
