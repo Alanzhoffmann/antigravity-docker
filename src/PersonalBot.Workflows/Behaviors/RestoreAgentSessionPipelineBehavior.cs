@@ -23,9 +23,12 @@ public class RestoreAgentSessionPipelineBehavior<TMessage, TResponse> : IPipelin
         if (string.IsNullOrEmpty(message.Session))
         {
             _logger.LogInformation("Trying to restore session for issue {IssueNumber}", message.IssueNumber);
-            using var scope = _scopeFactory.CreateScope();
-            var dbContext = scope.ServiceProvider.GetRequiredService<BotDbContext>();
-            message.Session = await dbContext.GetSessionFromIssueAsync(message.IssueNumber, message.Id, cancellationToken);
+            if (!string.IsNullOrEmpty(message.AgentName))
+            {
+                using var scope = _scopeFactory.CreateScope();
+                var dbContext = scope.ServiceProvider.GetRequiredService<BotDbContext>();
+                message.Session = await dbContext.GetSessionFromIssueAsync(message.IssueNumber, message.AgentName, message.Id, cancellationToken);
+            }
         }
 
         return await next(message, cancellationToken);

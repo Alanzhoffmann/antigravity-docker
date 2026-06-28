@@ -7,7 +7,7 @@ namespace PersonalBot.Tools;
 
 public class RepositoryTools
 {
-    private string _repoPath;
+    private readonly string _repoPath;
     private readonly ILogger<RepositoryTools> _logger;
     private readonly ProcessUtils _processUtils;
 
