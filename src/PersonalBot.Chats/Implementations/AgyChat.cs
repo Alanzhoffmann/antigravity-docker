@@ -46,7 +46,14 @@ internal partial class AgyChat : IAgentChat
         CancellationToken cancellationToken = default
     )
     {
-        (string agentOutput, string? log) = await ExecuteAgyHeadless(repoPath, prompt, session?.ConversationId, cancellationToken: cancellationToken);
+        var agyPrompt = prompt;
+        if (session is not null && session.ConversationId is null)
+        {
+            agyPrompt =
+                $"Previous conversation: {string.Join(Environment.NewLine, session.Messages.Select(m => $"Caller {m.Type}, Message: {m.Message}"))}" + prompt;
+        }
+
+        (string agentOutput, string? log) = await ExecuteAgyHeadless(repoPath, agyPrompt, session?.ConversationId, cancellationToken: cancellationToken);
 
         if (string.IsNullOrEmpty(agentOutput))
         {

@@ -92,6 +92,10 @@ internal class OllamaChat : IAgentChat
         if (!agentSession.TryGetInMemoryChatHistory(out var chatHistory))
         {
             chatHistory = [];
+            if (session is not null)
+            {
+                chatHistory = [.. session.Messages.Select(m => new ChatMessage(MapMessageTypeToRole(m.Type), m.Message))];
+            }
         }
 
         chatHistory.Add(new ChatMessage(ChatRole.User, prompt));
@@ -106,7 +110,7 @@ internal class OllamaChat : IAgentChat
                 [.. chatHistory.Select(m => new AgentMessage(m.Text, MapRoleToMessageType(m.Role)))],
                 SerializedAgentSession: serializedSession.ToString()
             ),
-            await _artifactParser.TryReadPlanArtifact(repoPath)
+            await _artifactParser.TryReadPlanArtifact(repoPath, cancellationToken)
         );
     }
 
@@ -116,6 +120,16 @@ internal class OllamaChat : IAgentChat
         : role == ChatRole.System ? MessageType.System
         : role == ChatRole.Tool ? MessageType.Tool
         : MessageType.Unknown;
+
+    private static ChatRole MapMessageTypeToRole(MessageType messageType) =>
+        messageType switch
+        {
+            MessageType.Assistant => ChatRole.Assistant,
+            MessageType.User => ChatRole.User,
+            MessageType.Tool => ChatRole.Tool,
+            MessageType.System => ChatRole.System,
+            _ => ChatRole.System,
+        };
 
     private static string GetInstructions(AgentPhase phase) =>
         phase switch
