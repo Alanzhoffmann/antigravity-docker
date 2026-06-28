@@ -62,11 +62,14 @@ internal partial class AgyChat : IAgentChat
             {
                 _logger.LogWarning("Exhausted tokens for AgyChat");
                 _lastExhaustedTokenTime = _timeProvider.GetUtcNow();
+
+                throw new InvalidOperationException("Agy has exhausted tokens");
             }
         }
 
         string newSessionId = ExtractConversationId(agentOutput);
         var messages = GetMessagesFromTranscript(newSessionId);
+
         string? cleanResponse = messages.LastOrDefault(m => m.Type is MessageType.Assistant)?.Message;
         if (string.IsNullOrEmpty(cleanResponse))
         {
@@ -81,7 +84,11 @@ internal partial class AgyChat : IAgentChat
             _logger.LogWarning("No plan artifact found for session '{newSessionId}'", newSessionId);
         }
 
-        return new ChatResult(cleanResponse, new Session(nameof(AgyChat), messages) { ConversationId = newSessionId }, planContent);
+        return new ChatResult(
+            cleanResponse,
+            new Session(nameof(AgyChat), messages.Count > 0 ? messages : session?.Messages ?? []) { ConversationId = newSessionId },
+            planContent
+        );
     }
 
     private async Task<(string output, string? log)> ExecuteAgyHeadless(
@@ -113,9 +120,10 @@ internal partial class AgyChat : IAgentChat
         var output = await _processUtils.RunProcessAsync("agy", arguments, repoPath, cancellationToken);
 
         string? logOutput = null;
-        if (File.Exists(logFileName))
+        var logLocation = Path.Combine(repoPath, logFileName);
+        if (File.Exists(logLocation))
         {
-            logOutput = await File.ReadAllTextAsync(logFileName, cancellationToken);
+            logOutput = await File.ReadAllTextAsync(logLocation, cancellationToken);
         }
 
         return (output, logOutput);
