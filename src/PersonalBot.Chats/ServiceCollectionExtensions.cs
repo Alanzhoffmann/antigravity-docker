@@ -24,9 +24,9 @@ public static class ServiceCollectionExtensions
             }
         );
 
-        services.TryAddSingleton<IAgentChat, OllamaChat>();
-        services.TryAddSingleton<IAgentChat, AgyChat>();
-        services.TryAddSingleton<IAgentChat, NullChat>();
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IAgentChat, OllamaChat>());
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IAgentChat, AgyChat>());
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IAgentChat, NullChat>());
 
         services.TryAddTransient<IChatResolver, ChatResolver>();
 

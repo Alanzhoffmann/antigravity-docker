@@ -17,7 +17,7 @@ internal partial class AgyChat : IAgentChat
     private readonly IOptionsMonitor<AgyOptions> _optionsMonitor;
     private readonly ArtifactParser _artifactParser;
     private readonly TimeProvider _timeProvider;
-    private DateTimeOffset _lastExhaustedTokenTime = DateTime.MinValue;
+    private DateTimeOffset _lastExhaustedTokenTime = DateTimeOffset.MinValue;
     private readonly ProcessUtils _processUtils;
 
     public AgyChat(
