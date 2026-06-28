@@ -35,7 +35,7 @@ internal partial class AgyChat : IAgentChat
         _processUtils = processUtils;
     }
 
-    public bool IsEnabled => _optionsMonitor.CurrentValue.IsEnabled && (_lastExhaustedTokenTime - _timeProvider.GetUtcNow()).TotalSeconds > 600;
+    public bool IsEnabled => _optionsMonitor.CurrentValue.IsEnabled && _timeProvider.GetUtcNow() > _lastExhaustedTokenTime.AddSeconds(600);
 
     public string AgentName => nameof(AgyChat);
 
