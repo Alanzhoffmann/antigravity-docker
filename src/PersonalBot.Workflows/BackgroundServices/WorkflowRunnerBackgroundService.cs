@@ -61,6 +61,7 @@ public class WorkflowRunnerBackgroundService : BackgroundService
                     {
                         _logger.LogError(ex, "Failed to run workflow {Workflow}, trying again later {RetryCount}", nextWorkflow, nextWorkflow.RetryCount);
                         nextWorkflow.RetryCount++;
+                        nextWorkflow.Status = WorkflowStatus.Pending;
                     }
                 }
                 finally
