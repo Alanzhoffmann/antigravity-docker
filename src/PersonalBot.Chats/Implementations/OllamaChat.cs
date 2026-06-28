@@ -101,10 +101,21 @@ internal class OllamaChat : IAgentChat
         var serializedSession = await aiAgent.SerializeSessionAsync(agentSession, cancellationToken: cancellationToken);
         return new ChatResult(
             response,
-            new Session(nameof(OllamaChat), [], SerializedAgentSession: serializedSession.ToString()),
+            new Session(
+                nameof(OllamaChat),
+                [.. chatHistory.Select(m => new AgentMessage(m.Text, MapRoleToMessageType(m.Role)))],
+                SerializedAgentSession: serializedSession.ToString()
+            ),
             await _artifactParser.TryReadPlanArtifact(repoPath)
         );
     }
+
+    private static MessageType MapRoleToMessageType(ChatRole role) =>
+        role == ChatRole.Assistant ? MessageType.Assistant
+        : role == ChatRole.User ? MessageType.User
+        : role == ChatRole.System ? MessageType.System
+        : role == ChatRole.Tool ? MessageType.Tool
+        : MessageType.Unknown;
 
     private static string GetInstructions(AgentPhase phase) =>
         phase switch
