@@ -59,10 +59,11 @@ internal partial class AgyChat : IAgentChat
         }
 
         string newSessionId = ExtractConversationId(agentOutput);
-        string cleanResponse = GetFinalResponseFromTranscript(newSessionId);
+        var messages = GetMessagesFromTranscript(newSessionId);
+        string? cleanResponse = messages.LastOrDefault(m => m.Type is MessageType.Assistant)?.Message;
         if (string.IsNullOrEmpty(cleanResponse))
         {
-            _logger.LogWarning($"[Processor] No transcript response, using raw output");
+            _logger.LogWarning($"No transcript response, using raw output");
             cleanResponse = agentOutput;
         }
 
@@ -70,10 +71,10 @@ internal partial class AgyChat : IAgentChat
         string planContent = await TryReadPlanArtifactAsync(newSessionId, cancellationToken);
         if (string.IsNullOrEmpty(planContent))
         {
-            _logger.LogWarning("[Processor] No plan artifact found for session '{newSessionId}'", newSessionId);
+            _logger.LogWarning("No plan artifact found for session '{newSessionId}'", newSessionId);
         }
 
-        return new ChatResult(cleanResponse, new Session(nameof(AgyChat), [], ConversationId: newSessionId), planContent);
+        return new ChatResult(cleanResponse, new Session(nameof(AgyChat), messages, ConversationId: newSessionId), planContent);
     }
 
     private async Task<(string output, string? log)> ExecuteAgyHeadless(
@@ -121,65 +122,118 @@ internal partial class AgyChat : IAgentChat
         return id;
     }
 
-    string GetFinalResponseFromTranscript(string sessionId)
+    public List<AgentMessage> GetMessagesFromTranscript(string sessionId)
     {
+        var messages = new List<AgentMessage>();
+
         if (string.IsNullOrEmpty(sessionId))
-            return string.Empty;
+            return messages;
 
         var transcriptPath = $"/root/.gemini/antigravity-cli/brain/{sessionId}/.system_generated/logs/transcript.jsonl";
 
-        _logger.LogInformation("[Transcript] Reading transcript for session '{sessionId}'", sessionId);
+        _logger.LogInformation("Reading transcript for session '{sessionId}'", sessionId);
 
         if (!File.Exists(transcriptPath))
         {
-            _logger.LogWarning("[Transcript] Transcript not found at '{transcriptPath}'", transcriptPath);
-            return string.Empty;
+            _logger.LogWarning("Transcript not found at '{transcriptPath}'", transcriptPath);
+            return messages;
         }
 
-        string finalContent = string.Empty;
-        int linesRead = 0,
-            responsesFound = 0;
+        int linesRead = 0;
+
         try
         {
             foreach (var line in File.ReadLines(transcriptPath))
             {
                 if (string.IsNullOrWhiteSpace(line))
                     continue;
+
                 linesRead++;
+
                 try
                 {
                     using var doc = JsonDocument.Parse(line);
                     var root = doc.RootElement;
-                    if (root.TryGetProperty("type", out var typeProp) && typeProp.GetString() == "PLANNER_RESPONSE")
+
+                    // 1. Get the Event Type
+                    if (root.TryGetProperty("type", out var typeProp) && typeProp.ValueKind == JsonValueKind.String)
                     {
-                        if (root.TryGetProperty("content", out var contentProp) && contentProp.ValueKind == JsonValueKind.String)
+                        string eventType = typeProp.GetString() ?? string.Empty;
+
+                        // 2. Map the Agy Event Type to your MessageType Enum
+                        if (TryMapMessageType(eventType, out MessageType role))
                         {
-                            var content = contentProp.GetString();
+                            // 3. Extract the content
+                            string content = string.Empty;
+
+                            // Most messages will have a simple string 'content' property
+                            if (root.TryGetProperty("content", out var contentProp) && contentProp.ValueKind == JsonValueKind.String)
+                            {
+                                content = contentProp.GetString() ?? string.Empty;
+                            }
+                            // Fallback for Tool Calls or Complex System Messages that might serialize differently
+                            else if (root.TryGetProperty("args", out var argsProp) || root.TryGetProperty("result", out var resultProp))
+                            {
+                                content = root.GetRawText(); // Capture the raw JSON if it's a complex tool object
+                            }
+
                             if (!string.IsNullOrEmpty(content))
                             {
-                                finalContent = content;
-                                responsesFound++;
+                                messages.Add(new AgentMessage(content, role));
                             }
                         }
                     }
                 }
                 catch
-                { /* Ignore malformed transcript lines */
+                {
+                    /* Ignore malformed transcript lines */
                 }
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "[Transcript] Error reading transcript for session '{sessionId}': {ExceptionMessage}", sessionId, ex.Message);
+            _logger.LogError(ex, "Error reading transcript for session '{sessionId}': {ExceptionMessage}", sessionId, ex.Message);
         }
 
-        _logger.LogInformation(
-            "[Transcript] Read {linesRead} lines, {responsesFound} planner responses (session='{sessionId}')",
-            linesRead,
-            responsesFound,
-            sessionId
-        );
-        return finalContent;
+        _logger.LogInformation("Read {linesRead} lines, generated {messageCount} chat messages (session='{sessionId}')", linesRead, messages.Count, sessionId);
+
+        return messages;
+    }
+
+    private static bool TryMapMessageType(string agyEventType, out MessageType messageType)
+    {
+        // NOTE: You will need to verify the exact string values in your Agy .jsonl files.
+        // These are the most common patterns for agent architectures.
+        switch (agyEventType.ToUpperInvariant())
+        {
+            case "USER_PROMPT":
+            case "USER_INPUT":
+                messageType = MessageType.User;
+                return true;
+
+            case "PLANNER_RESPONSE":
+            case "EXECUTION_RESPONSE":
+            case "AGENT_MESSAGE":
+                messageType = MessageType.Assistant;
+                return true;
+
+            case "SYSTEM_PROMPT":
+            case "SYSTEM_MESSAGE":
+            case "ERROR":
+                messageType = MessageType.System;
+                return true;
+
+            case "TOOL_CALL":
+            case "TOOL_RESULT":
+            case "ACTION":
+                messageType = MessageType.Tool;
+                return true;
+
+            default:
+                // Ignore unrecognized event types (e.g., internal telemetry, debug logs)
+                messageType = MessageType.Unknown;
+                return false;
+        }
     }
 
     private async Task<string> TryReadPlanArtifactAsync(string sessionId, CancellationToken cancellationToken = default)
