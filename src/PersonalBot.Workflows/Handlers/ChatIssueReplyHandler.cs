@@ -29,7 +29,7 @@ public class ChatIssueReplyHandler : IRequestHandler<ChatIssueReply>
 
                 var issueWebhook = (IIsIssueWebhook)chatStarted;
 
-                await _gitHubUtils.PostGitHubCommentAsync(issueWebhook.RepoPath, issueWebhook.IssueNumber, comment, chatStarted.Session, cancellationToken);
+                await _gitHubUtils.PostGitHubCommentAsync(issueWebhook.RepoPath, issueWebhook.IssueNumber, comment, cancellationToken);
                 break;
             default:
                 _logger.LogWarning("ChatIssueReply with no parent task, this should not happen");

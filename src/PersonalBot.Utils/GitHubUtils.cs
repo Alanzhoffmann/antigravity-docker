@@ -35,13 +35,11 @@ public partial class GitHubUtils
         }
     }
 
-    public async Task PostGitHubCommentAsync(string repoPath, string issueNum, string body, string? sessionId, CancellationToken cancellationToken = default)
+    public async Task PostGitHubCommentAsync(string repoPath, string issueNum, string body, CancellationToken cancellationToken = default)
     {
-        string payload = string.IsNullOrEmpty(sessionId) ? body : $"{body}\n\n<!-- agy-session-id: {sessionId} -->";
+        var payload = $"{body}\n\n{BotWatermark}";
 
-        payload += $"\n\n{BotWatermark}";
-
-        _logger.LogInformation("Posting comment on issue #{issueNum} (session='{sessionId}', length={PayloadLength})", issueNum, sessionId, payload.Length);
+        _logger.LogInformation("Posting comment on issue #{issueNum} (length={PayloadLength})", issueNum, payload.Length);
 
         await _processUtils.RunProcessAsync("gh", ["issue", "comment", issueNum, "--body", payload], repoPath, cancellationToken);
     }
