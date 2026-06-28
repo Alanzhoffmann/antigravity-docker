@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using PersonalBot.Data.Internal;
 using PersonalBot.Data.Models.Enums;
+using PersonalBot.Data.Models.ValueObjects;
 using PersonalBot.Data.Models.Workflows;
 
 namespace PersonalBot.Data;
@@ -17,15 +18,10 @@ public class BotDbContext : DbContext
 
     public MigrationState<BotDbContext> MigrationState { get; }
 
-    public async Task<string?> GetSessionFromIssueAsync(
-        string issueNumber,
-        string agentName,
-        Guid currentWorkflowId,
-        CancellationToken cancellationToken = default
-    ) =>
+    public async Task<Session?> GetSessionFromIssueAsync(string issueNumber, Guid currentWorkflowId, CancellationToken cancellationToken = default) =>
         await Set<ChatStarted>()
             .OrderByDescending(w => w.CreatedAt)
-            .Where(w => w.IssueNumber == issueNumber && w.Status == WorkflowStatus.Completed && w.AgentName == agentName && w.Id != currentWorkflowId)
+            .Where(w => w.IssueNumber == issueNumber && w.Status == WorkflowStatus.Completed && w.Id != currentWorkflowId)
             .Select(w => w.Session)
             .FirstOrDefaultAsync(cancellationToken: cancellationToken);
 

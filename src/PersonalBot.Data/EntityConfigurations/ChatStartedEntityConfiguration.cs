@@ -15,8 +15,7 @@ public class ChatStartedEntityConfiguration : IEntityTypeConfiguration<ChatStart
         builder.Property(c => c.Prompt).HasColumnName(nameof(ChatStarted.Prompt));
         builder.Property(c => c.AgentPhase).HasColumnName(nameof(ChatStarted.AgentPhase));
         builder.Property(c => c.ChatOutput).HasColumnName(nameof(ChatStarted.ChatOutput));
-        builder.Property(c => c.Session).HasColumnName(nameof(ChatStarted.Session));
         builder.Property(c => c.ArtifactOutput).HasColumnName(nameof(ChatStarted.ArtifactOutput));
-        builder.Property(c => c.AgentName).HasColumnName(nameof(ChatStarted.AgentName));
+        builder.ComplexProperty(c => c.Session).ToJson(nameof(ChatStarted.Session));
     }
 }

@@ -33,7 +33,6 @@ public class ChatStartedHandler : IRequestHandler<ChatStarted>
         request.ChatOutput = response.Output;
         request.ArtifactOutput = response.ArtifactOutput;
         request.Session = response.Session;
-        request.AgentName = agentChat.AgentName;
 
         _logger.LogInformation("{issueKey} processing complete", $"{request.RepoName}#{request.IssueNumber}");
 

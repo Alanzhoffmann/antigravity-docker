@@ -26,7 +26,7 @@ public class ChatIssueReplyHandler : IRequestHandler<ChatIssueReply>
                 var comment =
                     !string.IsNullOrEmpty(chatStarted.ArtifactOutput) ? chatStarted.ArtifactOutput
                     : !string.IsNullOrEmpty(chatStarted.ChatOutput) ? chatStarted.ChatOutput
-                    : $"empty output for {chatStarted.AgentName}";
+                    : $"empty output for {chatStarted.Session?.AgentName ?? "(no session)"}";
 
                 var issueWebhook = (IIsIssueWebhook)chatStarted;
 

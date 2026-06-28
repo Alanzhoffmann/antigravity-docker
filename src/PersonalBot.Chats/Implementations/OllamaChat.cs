@@ -10,6 +10,7 @@ using PersonalBot.Chats.Interfaces;
 using PersonalBot.Chats.Models;
 using PersonalBot.Chats.Options;
 using PersonalBot.Data.Models.Enums;
+using PersonalBot.Data.Models.ValueObjects;
 using PersonalBot.Tools;
 using PersonalBot.Tools.Factories;
 using PersonalBot.Utils;
@@ -52,15 +53,13 @@ internal class OllamaChat : IAgentChat
     [MemberNotNullWhen(true, nameof(Model), nameof(Url))]
     public bool IsEnabled => Url is not null && !string.IsNullOrEmpty(Model);
 
-    public string AgentName => nameof(OllamaChat);
-
     public int SortOrder => 1;
 
     public async ValueTask<ChatResult> GetResponseAsync(
         string repoPath,
         string prompt,
         AgentPhase phase = AgentPhase.Planning,
-        string? session = null,
+        Session? session = null,
         CancellationToken cancellationToken = default
     )
     {
@@ -80,9 +79,9 @@ internal class OllamaChat : IAgentChat
         var aiAgent = ollamaClient.AsAIAgent(instructions: systemInstructions, tools: [.. repositoryTools.Tools, .. roslynAgentTools.Tools]);
 
         AgentSession agentSession;
-        if (!string.IsNullOrEmpty(session))
+        if (session is not null && !string.IsNullOrEmpty(session.SerializedAgentSession))
         {
-            var jsonState = JsonSerializer.Deserialize<JsonElement>(session);
+            var jsonState = JsonSerializer.Deserialize<JsonElement>(session.SerializedAgentSession);
             agentSession = await aiAgent.DeserializeSessionAsync(jsonState, cancellationToken: cancellationToken);
         }
         else
@@ -100,7 +99,11 @@ internal class OllamaChat : IAgentChat
         string response = await GetResponse(phase, repoPath, aiAgent, chatHistory, agentSession, cancellationToken);
 
         var serializedSession = await aiAgent.SerializeSessionAsync(agentSession, cancellationToken: cancellationToken);
-        return new ChatResult(response, serializedSession.ToString(), await _artifactParser.TryReadPlanArtifact(repoPath));
+        return new ChatResult(
+            response,
+            new Session(nameof(OllamaChat), [], SerializedAgentSession: serializedSession.ToString()),
+            await _artifactParser.TryReadPlanArtifact(repoPath)
+        );
     }
 
     private static string GetInstructions(AgentPhase phase) =>

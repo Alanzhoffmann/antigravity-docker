@@ -20,17 +20,19 @@ public class RestoreAgentSessionPipelineBehavior<TMessage, TResponse> : IPipelin
 
     public async ValueTask<TResponse> Handle(TMessage message, MessageHandlerDelegate<TMessage, TResponse> next, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrEmpty(message.Session))
-        {
-            _logger.LogInformation("Trying to restore session for issue {IssueNumber}", message.IssueNumber);
-            if (!string.IsNullOrEmpty(message.AgentName))
-            {
-                using var scope = _scopeFactory.CreateScope();
-                var dbContext = scope.ServiceProvider.GetRequiredService<BotDbContext>();
-                message.Session = await dbContext.GetSessionFromIssueAsync(message.IssueNumber, message.AgentName, message.Id, cancellationToken);
-            }
-        }
+        await SetMessageSessionAsync(message, cancellationToken);
 
         return await next(message, cancellationToken);
+    }
+
+    private async Task SetMessageSessionAsync(TMessage message, CancellationToken cancellationToken)
+    {
+        if (message.Session is null)
+        {
+            _logger.LogInformation("Trying to restore session for issue {IssueNumber}", message.IssueNumber);
+            using var scope = _scopeFactory.CreateScope();
+            var dbContext = scope.ServiceProvider.GetRequiredService<BotDbContext>();
+            message.Session = await dbContext.GetSessionFromIssueAsync(message.IssueNumber, message.Id, cancellationToken);
+        }
     }
 }

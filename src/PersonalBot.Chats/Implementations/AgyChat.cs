@@ -6,6 +6,7 @@ using PersonalBot.Chats.Interfaces;
 using PersonalBot.Chats.Models;
 using PersonalBot.Chats.Options;
 using PersonalBot.Data.Models.Enums;
+using PersonalBot.Data.Models.ValueObjects;
 using PersonalBot.Tools;
 using PersonalBot.Utils;
 
@@ -37,17 +38,15 @@ internal partial class AgyChat : IAgentChat
 
     public bool IsEnabled => _optionsMonitor.CurrentValue.IsEnabled && _timeProvider.GetUtcNow() > _lastExhaustedTokenTime.AddSeconds(600);
 
-    public string AgentName => nameof(AgyChat);
-
     public async ValueTask<ChatResult> GetResponseAsync(
         string repoPath,
         string prompt,
         AgentPhase phase = AgentPhase.Planning,
-        string? session = null,
+        Session? session = null,
         CancellationToken cancellationToken = default
     )
     {
-        (string agentOutput, string? log) = await ExecuteAgyHeadless(repoPath, prompt, cancellationToken: cancellationToken);
+        (string agentOutput, string? log) = await ExecuteAgyHeadless(repoPath, prompt, session?.ConversationId, cancellationToken: cancellationToken);
 
         if (string.IsNullOrEmpty(agentOutput))
         {
@@ -74,7 +73,7 @@ internal partial class AgyChat : IAgentChat
             _logger.LogWarning("[Processor] No plan artifact found for session '{newSessionId}'", newSessionId);
         }
 
-        return new ChatResult(cleanResponse, newSessionId, planContent);
+        return new ChatResult(cleanResponse, new Session(nameof(AgyChat), [], ConversationId: newSessionId), planContent);
     }
 
     private async Task<(string output, string? log)> ExecuteAgyHeadless(
@@ -97,6 +96,7 @@ internal partial class AgyChat : IAgentChat
             arguments.Add("--conversation");
             arguments.Add(conversationId);
         }
+
         arguments.Add("--prompt");
         arguments.Add($"\"{prompt}\"");
         arguments.Add("--log-file");
@@ -117,7 +117,7 @@ internal partial class AgyChat : IAgentChat
     {
         var match = ConversationIdRegex.Match(agyOutput);
         string id = match.Success ? match.Value : string.Empty;
-        _logger.LogInformation("[AgyRunner] Extracted conversation ID: '{ConversationId}'", string.IsNullOrEmpty(id) ? "none found" : id);
+        _logger.LogInformation("Extracted conversation ID: '{ConversationId}'", string.IsNullOrEmpty(id) ? "none found" : id);
         return id;
     }
 
