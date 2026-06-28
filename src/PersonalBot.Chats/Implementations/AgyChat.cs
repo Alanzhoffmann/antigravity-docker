@@ -81,7 +81,7 @@ internal partial class AgyChat : IAgentChat
             _logger.LogWarning("No plan artifact found for session '{newSessionId}'", newSessionId);
         }
 
-        return new ChatResult(cleanResponse, new Session(nameof(AgyChat), messages, ConversationId: newSessionId), planContent);
+        return new ChatResult(cleanResponse, new Session(nameof(AgyChat), messages) { ConversationId = newSessionId }, planContent);
     }
 
     private async Task<(string output, string? log)> ExecuteAgyHeadless(
