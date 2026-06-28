@@ -100,7 +100,7 @@ internal partial class AgyChat : IAgentChat
         arguments.Add("--prompt");
         arguments.Add($"\"{prompt}\"");
         arguments.Add("--log-file");
-        arguments.Add("logFileName");
+        arguments.Add(logFileName);
 
         var output = await _processUtils.RunProcessAsync("agy", arguments, repoPath, cancellationToken);
 
