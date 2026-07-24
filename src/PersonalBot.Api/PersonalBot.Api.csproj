@@ -26,5 +26,11 @@
       ExcludeAssets="runtime"
       PrivateAssets="all"
     />
+    <PackageReference
+      Include="Microsoft.NET.StringTools"
+      Version="18.8.2"
+      ExcludeAssets="runtime"
+      PrivateAssets="all"
+    />
   </ItemGroup>
 </Project>

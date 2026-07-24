@@ -76,7 +76,12 @@ internal class OllamaChat : IAgentChat
         using IChatClient ollamaClient = new OllamaApiClient(client, Model);
         string systemInstructions = GetInstructions(phase);
 
-        var aiAgent = ollamaClient.AsAIAgent(instructions: systemInstructions, tools: [.. repositoryTools.Tools, .. roslynAgentTools.Tools]);
+        var aiAgent = ollamaClient.AsHarnessAgent(
+            new HarnessAgentOptions
+            {
+                ChatOptions = new ChatOptions { Instructions = systemInstructions, Tools = [.. repositoryTools.Tools, .. roslynAgentTools.Tools] },
+            }
+        );
 
         AgentSession agentSession;
         if (session is not null && !string.IsNullOrEmpty(session.SerializedAgentSession))
@@ -159,7 +164,7 @@ internal class OllamaChat : IAgentChat
     private async Task<string> GetResponse(
         AgentPhase phase,
         string repoPath,
-        ChatClientAgent aiAgent,
+        HarnessAgent aiAgent,
         List<ChatMessage> chatHistory,
         AgentSession agentSession,
         CancellationToken cancellationToken = default
