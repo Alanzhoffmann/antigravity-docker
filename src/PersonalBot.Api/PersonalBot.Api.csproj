@@ -14,7 +14,7 @@
   <ItemGroup>
     <PackageReference
       Include="Microsoft.EntityFrameworkCore.Design"
-      Version="11.0.0-preview.5.26302.115"
+      Version="11.0.0-preview.6.26359.118"
     >
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
@@ -22,7 +22,7 @@
 
     <PackageReference
       Include="Microsoft.Build.Framework"
-      Version="18.4.0"
+      Version="18.8.2"
       ExcludeAssets="runtime"
       PrivateAssets="all"
     />
